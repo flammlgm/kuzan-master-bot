@@ -12,16 +12,42 @@ const {
   createPollExtraTextModal,
   createEventDetailsModal,
   createSkipCoverButton,
+  createCampaignNameModal,
+  createAddTextChannelModal,
+  createAddVoiceChannelModal,
+  createCampaignBuilderButtons,
 } = require('./ui');
-const { createTicket, createTicketIntroEmbed } = require('./tickets');
+const {
+  createTicket,
+  createTicketIntroEmbed,
+  deleteTicketLater,
+} = require('./tickets');
 const { publishPoll } = require('./polls');
 const {
   publishEventFromInteraction,
   publishEventFromMessage,
 } = require('./events');
+const {
+  buildCampaignSummary,
+  createCampaign,
+} = require('./campaigns');
 
 function isDungeonMaster(interaction) {
   return interaction.member.roles.cache.has(config.DUNGEON_MASTER_ROLE_ID);
+}
+
+function createCampaignPreviewEmbed(campaign) {
+  return new EmbedBuilder()
+    .setTitle('🏰 Черновик кампании')
+    .setDescription(
+      [
+        `**Название:** ${campaign.title}`,
+        '',
+        '**Каналы:**',
+        buildCampaignSummary(campaign),
+      ].join('\n')
+    )
+    .setColor(0x6d4aff);
 }
 
 async function startPollFlow(interaction) {
@@ -72,6 +98,24 @@ async function startEventFlow(interaction) {
   });
 }
 
+async function startCampaignFlow(interaction) {
+  const ticket = await createTicket(interaction);
+
+  const session = sessions.get(interaction.user.id);
+  session.mode = 'campaign';
+  sessions.set(interaction.user.id, session);
+
+  await interaction.reply({
+    content: `Тикет открыт: <#${ticket.id}>`,
+    flags: MessageFlags.Ephemeral,
+  });
+
+  return interaction.followUp({
+    content: 'Открой тикет и заполни название кампании.',
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
 async function handleInteraction(interaction) {
   try {
     if (interaction.isChatInputCommand()) {
@@ -101,6 +145,84 @@ async function handleInteraction(interaction) {
         }
 
         return startEventFlow(interaction);
+      }
+
+      if (interaction.customId === 'create_campaign') {
+        if (!isDungeonMaster(interaction)) {
+          return interaction.reply({
+            content: 'Эта кнопка доступна только мастерам.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        const ticket = await createTicket(interaction);
+
+        const session = sessions.get(interaction.user.id);
+        session.mode = 'campaign';
+        sessions.set(interaction.user.id, session);
+
+        await ticket.send({
+          content: `<@${interaction.user.id}> нажми кнопку ниже, чтобы начать создание кампании.`,
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 2,
+                  custom_id: 'campaign_open_name_modal',
+                  label: 'Ввести название кампании',
+                  style: 1,
+                  emoji: { name: '🏰' },
+                },
+              ],
+            },
+          ],
+        });
+
+        return interaction.reply({
+          content: `Тикет открыт: <#${ticket.id}>`,
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      if (interaction.customId === 'campaign_open_name_modal') {
+        return interaction.showModal(createCampaignNameModal());
+      }
+
+      if (interaction.customId === 'campaign_add_text_channel') {
+        return interaction.showModal(createAddTextChannelModal());
+      }
+
+      if (interaction.customId === 'campaign_add_voice_channel') {
+        return interaction.showModal(createAddVoiceChannelModal());
+      }
+
+      if (interaction.customId === 'campaign_confirm_create') {
+        const session = sessions.get(interaction.user.id);
+
+        if (!session?.campaign) {
+          return interaction.reply({
+            content: 'Черновик кампании не найден. Начни заново.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        return createCampaign(interaction, session);
+      }
+
+      if (interaction.customId === 'campaign_cancel') {
+        const session = sessions.get(interaction.user.id);
+
+        if (session?.ticketChannelId) {
+          await deleteTicketLater(session.ticketChannelId, 1000);
+        }
+
+        sessions.delete(interaction.user.id);
+
+        return interaction.reply({
+          content: 'Создание кампании отменено.',
+          flags: MessageFlags.Ephemeral,
+        });
       }
 
       if (interaction.customId === 'skip_event_cover') {
@@ -211,6 +333,84 @@ async function handleInteraction(interaction) {
     }
 
     if (interaction.isModalSubmit()) {
+      if (interaction.customId === 'campaign_name_modal') {
+        const session = sessions.get(interaction.user.id);
+
+        if (!session) {
+          return interaction.reply({
+            content: 'Сессия потерялась. Начни заново через панель.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        const title = interaction.fields.getTextInputValue('campaign_title');
+
+        session.mode = 'campaign';
+        session.campaign = {
+          title,
+          channels: [],
+        };
+
+        sessions.set(interaction.user.id, session);
+
+        return interaction.reply({
+          embeds: [createCampaignPreviewEmbed(session.campaign)],
+          components: createCampaignBuilderButtons(),
+        });
+      }
+
+      if (interaction.customId === 'add_text_channel_modal') {
+        const session = sessions.get(interaction.user.id);
+
+        if (!session?.campaign) {
+          return interaction.reply({
+            content: 'Черновик кампании не найден.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        const name = interaction.fields.getTextInputValue('channel_name');
+        const topic = interaction.fields.getTextInputValue('channel_topic') || '';
+
+        session.campaign.channels.push({
+          type: 'text',
+          name,
+          topic,
+        });
+
+        sessions.set(interaction.user.id, session);
+
+        return interaction.reply({
+          embeds: [createCampaignPreviewEmbed(session.campaign)],
+          components: createCampaignBuilderButtons(),
+        });
+      }
+
+      if (interaction.customId === 'add_voice_channel_modal') {
+        const session = sessions.get(interaction.user.id);
+
+        if (!session?.campaign) {
+          return interaction.reply({
+            content: 'Черновик кампании не найден.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        const name = interaction.fields.getTextInputValue('channel_name');
+
+        session.campaign.channels.push({
+          type: 'voice',
+          name,
+        });
+
+        sessions.set(interaction.user.id, session);
+
+        return interaction.reply({
+          embeds: [createCampaignPreviewEmbed(session.campaign)],
+          components: createCampaignBuilderButtons(),
+        });
+      }
+
       if (interaction.customId === 'poll_extra_text_modal') {
         const session = sessions.get(interaction.user.id);
 
