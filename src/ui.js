@@ -202,12 +202,22 @@ function createCampaignNameModal() {
 
   const titleInput = new TextInputBuilder()
     .setCustomId('campaign_title')
-    .setLabel('Название кампании')
+    .setLabel('Название категории / кампании')
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
     .setPlaceholder('Например: Хроники Разлома');
 
-  modal.addComponents(new ActionRowBuilder().addComponents(titleInput));
+  const roleInput = new TextInputBuilder()
+    .setCustomId('campaign_role_name')
+    .setLabel('Название роли кампании')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Например: shard_binder');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(titleInput),
+    new ActionRowBuilder().addComponents(roleInput)
+  );
 
   return modal;
 }

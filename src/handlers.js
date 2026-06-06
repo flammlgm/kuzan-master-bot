@@ -41,7 +41,8 @@ function createCampaignPreviewEmbed(campaign) {
     .setTitle('🏰 Черновик кампании')
     .setDescription(
       [
-        `**Название:** ${campaign.title}`,
+        `**Категория:** ${campaign.title}`,
+        `**Роль:** ${campaign.roleName}`,
         '',
         '**Каналы:**',
         buildCampaignSummary(campaign),
@@ -105,13 +106,26 @@ async function startCampaignFlow(interaction) {
   session.mode = 'campaign';
   sessions.set(interaction.user.id, session);
 
-  await interaction.reply({
-    content: `Тикет открыт: <#${ticket.id}>`,
-    flags: MessageFlags.Ephemeral,
+  await ticket.send({
+    content: `<@${interaction.user.id}> нажми кнопку ниже, чтобы начать создание кампании.`,
+    components: [
+      {
+        type: 1,
+        components: [
+          {
+            type: 2,
+            custom_id: 'campaign_open_name_modal',
+            label: 'Ввести название кампании',
+            style: 1,
+            emoji: { name: '🏰' },
+          },
+        ],
+      },
+    ],
   });
 
-  return interaction.followUp({
-    content: 'Открой тикет и заполни название кампании.',
+  return interaction.reply({
+    content: `Тикет открыт: <#${ticket.id}>`,
     flags: MessageFlags.Ephemeral,
   });
 }
@@ -155,34 +169,7 @@ async function handleInteraction(interaction) {
           });
         }
 
-        const ticket = await createTicket(interaction);
-
-        const session = sessions.get(interaction.user.id);
-        session.mode = 'campaign';
-        sessions.set(interaction.user.id, session);
-
-        await ticket.send({
-          content: `<@${interaction.user.id}> нажми кнопку ниже, чтобы начать создание кампании.`,
-          components: [
-            {
-              type: 1,
-              components: [
-                {
-                  type: 2,
-                  custom_id: 'campaign_open_name_modal',
-                  label: 'Ввести название кампании',
-                  style: 1,
-                  emoji: { name: '🏰' },
-                },
-              ],
-            },
-          ],
-        });
-
-        return interaction.reply({
-          content: `Тикет открыт: <#${ticket.id}>`,
-          flags: MessageFlags.Ephemeral,
-        });
+        return startCampaignFlow(interaction);
       }
 
       if (interaction.customId === 'campaign_open_name_modal') {
@@ -344,10 +331,12 @@ async function handleInteraction(interaction) {
         }
 
         const title = interaction.fields.getTextInputValue('campaign_title');
+        const roleName = interaction.fields.getTextInputValue('campaign_role_name');
 
         session.mode = 'campaign';
         session.campaign = {
           title,
+          roleName,
           channels: [],
         };
 
