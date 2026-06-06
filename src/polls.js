@@ -3,6 +3,7 @@ const { client } = require('./client');
 const { config } = require('./config');
 const { sessions } = require('./sessions');
 const { deleteTicketLater } = require('./tickets');
+const { auditLog, userField } = require('./utils/auditLogger');
 
 function getWeekLabel(value) {
   return {
@@ -58,6 +59,14 @@ async function publishPoll(interaction, session, extraText) {
   for (const reaction of ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣']) {
     await message.react(reaction);
   }
+
+  await auditLog(client, '📅 Создано голосование', [
+    { name: 'Мастер', value: userField(interaction.user) },
+    { name: 'Роль для тега', value: `<@&${session.roleId}>` },
+    { name: 'Неделя', value: weekLabel },
+    { name: 'Канал публикации', value: `<#${config.GAME_SCHEDULE_CHANNEL_ID}>` },
+    { name: 'Комментарий', value: extraText || '—' },
+  ]);
 
   const ticketChannelId = session.ticketChannelId;
 

@@ -22,4 +22,8 @@ process.on('unhandledRejection', (error) => {
   console.error('Unhandled rejection:', error);
 });
 
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+});
+
 client.login(config.DISCORD_TOKEN);

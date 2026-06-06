@@ -7,6 +7,7 @@ const {
 const { client } = require('./client');
 const { sessions } = require('./sessions');
 const { deleteTicketLater } = require('./tickets');
+const { auditLog, userField } = require('./utils/auditLogger');
 
 function normalizeChannelName(name) {
   return name.trim().toLowerCase().replace(/\s+/g, '_').slice(0, 90);
@@ -99,6 +100,16 @@ async function createCampaign(interaction, session) {
     createdChannels.push(channel);
   }
 
+  await auditLog(client, '🏰 Создана кампания', [
+    { name: 'Мастер', value: userField(interaction.user) },
+    { name: 'Категория', value: campaign.title, inline: true },
+    { name: 'Роль', value: `<@&${role.id}>`, inline: true },
+    {
+      name: 'Каналы',
+      value: createdChannels.map((channel) => `<#${channel.id}>`).join('\n'),
+    },
+  ]);
+
   const ticketChannelId = session.ticketChannelId;
   sessions.delete(interaction.user.id);
 
@@ -125,10 +136,11 @@ async function applyCampaignRole(interaction, session) {
   const role = interaction.guild.roles.cache.get(session.manageRoleId);
 
   if (!role) {
-    return interaction.editReply('Роль не найдена. Discord опять съел реальность.');
+    return interaction.editReply('Роль не найдена.');
   }
 
   const results = [];
+  const affectedMembers = [];
 
   for (const userId of session.manageUserIds) {
     const member = await interaction.guild.members.fetch(userId).catch(() => null);
@@ -147,7 +159,26 @@ async function applyCampaignRole(interaction, session) {
       await member.roles.remove(role);
       results.push(`✅ у <@${userId}> снята роль <@&${role.id}>`);
     }
+
+    affectedMembers.push(member);
   }
+
+  await auditLog(
+    client,
+    session.manageAction === 'add'
+      ? '👤 Игроки добавлены в кампанию'
+      : '🚪 Игроки удалены из кампании',
+    [
+      { name: 'Мастер', value: userField(interaction.user) },
+      { name: 'Роль кампании', value: `<@&${role.id}>` },
+      {
+        name: 'Игроки',
+        value: affectedMembers.length
+          ? affectedMembers.map((member) => `${member.user.tag} — <@${member.id}>`).join('\n')
+          : 'Нет успешно обработанных игроков',
+      },
+    ]
+  );
 
   const ticketChannelId = session.ticketChannelId;
   sessions.delete(interaction.user.id);

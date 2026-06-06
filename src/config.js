@@ -18,6 +18,8 @@ const config = {
   GUILD_ID: process.env.GUILD_ID,
   GAME_SCHEDULE_CHANNEL_ID: process.env.GAME_SCHEDULE_CHANNEL_ID,
   DUNGEON_MASTER_ROLE_ID: process.env.DUNGEON_MASTER_ROLE_ID,
+  OWNER_USER_ID: process.env.OWNER_USER_ID,
+  AUDIT_CHANNEL_ID: process.env.AUDIT_CHANNEL_ID,
 };
 
 module.exports = { config };

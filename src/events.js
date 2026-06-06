@@ -9,6 +9,7 @@ const { client } = require('./client');
 const { config } = require('./config');
 const { sessions } = require('./sessions');
 const { deleteTicketLater } = require('./tickets');
+const { auditLog, userField } = require('./utils/auditLogger');
 
 async function createDiscordEvent({
   guild,
@@ -110,6 +111,15 @@ async function publishEventCore({ guild, user, session, imageBuffer }) {
       roles: [session.roleId],
     },
   });
+
+  await auditLog(client, '🎲 Создано событие', [
+    { name: 'Мастер', value: userField(user) },
+    { name: 'Название', value: session.event.title },
+    { name: 'Роль для тега', value: `<@&${session.roleId}>` },
+    { name: 'Канал события', value: `<#${session.event.channelId}>` },
+    { name: 'Начало', value: `<t:${Math.floor(startDate.getTime() / 1000)}:F>` },
+    { name: 'Ссылка', value: eventUrl },
+  ]);
 
   return event;
 }
