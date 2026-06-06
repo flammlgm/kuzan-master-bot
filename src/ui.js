@@ -29,10 +29,20 @@ function createPanel() {
     .setEmoji('🎲')
     .setStyle(ButtonStyle.Success);
 
+  const campaignButton = new ButtonBuilder()
+    .setCustomId('create_campaign')
+    .setLabel('Создать кампанию')
+    .setEmoji('🏰')
+    .setStyle(ButtonStyle.Secondary);
+
   return {
     embeds: [embed],
     components: [
-      new ActionRowBuilder().addComponents(pollButton, eventButton),
+      new ActionRowBuilder().addComponents(
+        pollButton,
+        eventButton,
+        campaignButton
+      ),
     ],
   };
 }
@@ -185,6 +195,98 @@ function createSkipCoverButton() {
   return new ActionRowBuilder().addComponents(button);
 }
 
+function createCampaignNameModal() {
+  const modal = new ModalBuilder()
+    .setCustomId('campaign_name_modal')
+    .setTitle('Создание кампании');
+
+  const titleInput = new TextInputBuilder()
+    .setCustomId('campaign_title')
+    .setLabel('Название кампании')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Например: Хроники Разлома');
+
+  modal.addComponents(new ActionRowBuilder().addComponents(titleInput));
+
+  return modal;
+}
+
+function createAddTextChannelModal() {
+  const modal = new ModalBuilder()
+    .setCustomId('add_text_channel_modal')
+    .setTitle('Добавить текстовый канал');
+
+  const nameInput = new TextInputBuilder()
+    .setCustomId('channel_name')
+    .setLabel('Название канала')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Например: 📜 chronicle_of_fragments');
+
+  const topicInput = new TextInputBuilder()
+    .setCustomId('channel_topic')
+    .setLabel('Описание канала')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(false)
+    .setPlaceholder('Например: важная информация по кампании.');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(nameInput),
+    new ActionRowBuilder().addComponents(topicInput)
+  );
+
+  return modal;
+}
+
+function createAddVoiceChannelModal() {
+  const modal = new ModalBuilder()
+    .setCustomId('add_voice_channel_modal')
+    .setTitle('Добавить голосовой канал');
+
+  const nameInput = new TextInputBuilder()
+    .setCustomId('channel_name')
+    .setLabel('Название голосового канала')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Например: 🔊 voice_main');
+
+  modal.addComponents(new ActionRowBuilder().addComponents(nameInput));
+
+  return modal;
+}
+
+function createCampaignBuilderButtons() {
+  const addTextButton = new ButtonBuilder()
+    .setCustomId('campaign_add_text_channel')
+    .setLabel('Добавить текстовый')
+    .setEmoji('➕')
+    .setStyle(ButtonStyle.Primary);
+
+  const addVoiceButton = new ButtonBuilder()
+    .setCustomId('campaign_add_voice_channel')
+    .setLabel('Добавить голосовой')
+    .setEmoji('🔊')
+    .setStyle(ButtonStyle.Primary);
+
+  const createButton = new ButtonBuilder()
+    .setCustomId('campaign_confirm_create')
+    .setLabel('Создать кампанию')
+    .setEmoji('✅')
+    .setStyle(ButtonStyle.Success);
+
+  const cancelButton = new ButtonBuilder()
+    .setCustomId('campaign_cancel')
+    .setLabel('Отменить')
+    .setEmoji('❌')
+    .setStyle(ButtonStyle.Danger);
+
+  return [
+    new ActionRowBuilder().addComponents(addTextButton, addVoiceButton),
+    new ActionRowBuilder().addComponents(createButton, cancelButton),
+  ];
+}
+
 module.exports = {
   createPanel,
   createRoleSelectMenu,
@@ -195,4 +297,8 @@ module.exports = {
   createPollExtraTextModal,
   createEventDetailsModal,
   createSkipCoverButton,
+  createCampaignNameModal,
+  createAddTextChannelModal,
+  createAddVoiceChannelModal,
+  createCampaignBuilderButtons,
 };
