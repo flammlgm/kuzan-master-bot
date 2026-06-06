@@ -139,6 +139,15 @@ async function startCampaignFlow(interaction) {
 }
 
 async function startCampaignPlayersFlow(interaction, action) {
+  const roleMenu = createCampaignRoleSelectMenu(interaction.guild);
+
+  if (!roleMenu) {
+    return interaction.reply({
+      content: `На сервере нет ролей кампаний с префиксом \`${config.CAMPAIGN_ROLE_PREFIX}\`.`,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
   const ticket = await createTicket(interaction);
 
   const session = sessions.get(interaction.user.id);
@@ -156,10 +165,8 @@ async function startCampaignPlayersFlow(interaction, action) {
 
   await ticket.send({
     content: `<@${interaction.user.id}>`,
-    embeds: [
-      createTicketIntroEmbed(title, description),
-    ],
-    components: [createCampaignRoleSelectMenu()],
+    embeds: [createTicketIntroEmbed(title, description)],
+    components: [roleMenu],
   });
 
   return interaction.reply({
@@ -286,36 +293,6 @@ async function handleInteraction(interaction) {
       }
     }
 
-    if (interaction.isRoleSelectMenu()) {
-      const session = sessions.get(interaction.user.id);
-
-      if (!session) {
-        return interaction.reply({
-          content: 'Сессия потерялась. Начни заново через панель.',
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-
-      if (interaction.customId === 'campaign_manage_role_select') {
-        session.manageRoleId = interaction.values[0];
-        sessions.set(interaction.user.id, session);
-
-        return interaction.update({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle(
-                session.manageAction === 'add'
-                  ? '👤 Добавление игроков'
-                  : '🚪 Удаление игроков'
-              )
-              .setDescription('Шаг 2: выберите игроков.')
-              .setColor(0x6d4aff),
-          ],
-          components: [createCampaignUserSelectMenu()],
-        });
-      }
-    }
-
     if (interaction.isUserSelectMenu()) {
       const session = sessions.get(interaction.user.id);
 
@@ -367,6 +344,25 @@ async function handleInteraction(interaction) {
         return interaction.reply({
           content: 'Сессия потерялась. Начни заново через панель.',
           flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      if (interaction.customId === 'campaign_manage_role_select') {
+        session.manageRoleId = interaction.values[0];
+        sessions.set(interaction.user.id, session);
+
+        return interaction.update({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle(
+                session.manageAction === 'add'
+                  ? '👤 Добавление игроков'
+                  : '🚪 Удаление игроков'
+              )
+              .setDescription('Шаг 2: выберите игроков.')
+              .setColor(0x6d4aff),
+          ],
+          components: [createCampaignUserSelectMenu()],
         });
       }
 

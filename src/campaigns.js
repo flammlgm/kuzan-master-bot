@@ -5,6 +5,7 @@ const {
 } = require('discord.js');
 
 const { client } = require('./client');
+const { config } = require('./config');
 const { sessions } = require('./sessions');
 const { deleteTicketLater } = require('./tickets');
 const { auditLog, userField } = require('./utils/auditLogger');
@@ -23,6 +24,16 @@ function buildCampaignSummary(campaign) {
       return `${index + 1}. ${icon} ${channel.name}${topic}`;
     })
     .join('\n');
+}
+
+function ensureCampaignRoleName(roleName) {
+  const trimmed = roleName.trim();
+
+  if (trimmed.startsWith(config.CAMPAIGN_ROLE_PREFIX)) {
+    return trimmed;
+  }
+
+  return `${config.CAMPAIGN_ROLE_PREFIX}${trimmed}`;
 }
 
 function getCampaignPermissionOverwrites(guild, roleId) {
@@ -68,8 +79,10 @@ async function createCampaign(interaction, session) {
     });
   }
 
+  const finalRoleName = ensureCampaignRoleName(campaign.roleName);
+
   const role = await guild.roles.create({
-    name: campaign.roleName,
+    name: finalRoleName,
     mentionable: true,
     reason: `Campaign created by ${interaction.user.tag}`,
   });
@@ -139,6 +152,21 @@ async function applyCampaignRole(interaction, session) {
     return interaction.editReply('Роль не найдена.');
   }
 
+  if (!role.name.startsWith(config.CAMPAIGN_ROLE_PREFIX)) {
+    await auditLog(client, '🚨 Попытка изменить запрещённую роль', [
+      { name: 'Мастер', value: userField(interaction.user) },
+      { name: 'Роль', value: `${role.name} — <@&${role.id}>` },
+      {
+        name: 'Действие',
+        value: session.manageAction === 'add' ? 'Выдать роль' : 'Снять роль',
+      },
+    ]);
+
+    return interaction.editReply({
+      content: `Запрещено изменять роль <@&${role.id}> через панель мастера.`,
+    });
+  }
+
   const results = [];
   const affectedMembers = [];
 
@@ -150,17 +178,21 @@ async function applyCampaignRole(interaction, session) {
       continue;
     }
 
-    if (session.manageAction === 'add') {
-      await member.roles.add(role);
-      results.push(`✅ <@${userId}> получил роль <@&${role.id}>`);
-    }
+    try {
+      if (session.manageAction === 'add') {
+        await member.roles.add(role);
+        results.push(`✅ <@${userId}> получил роль <@&${role.id}>`);
+      }
 
-    if (session.manageAction === 'remove') {
-      await member.roles.remove(role);
-      results.push(`✅ у <@${userId}> снята роль <@&${role.id}>`);
-    }
+      if (session.manageAction === 'remove') {
+        await member.roles.remove(role);
+        results.push(`✅ у <@${userId}> снята роль <@&${role.id}>`);
+      }
 
-    affectedMembers.push(member);
+      affectedMembers.push(member);
+    } catch (error) {
+      results.push(`❌ не удалось изменить роли у <@${userId}>`);
+    }
   }
 
   await auditLog(

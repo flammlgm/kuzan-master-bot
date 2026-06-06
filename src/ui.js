@@ -5,13 +5,14 @@ const {
   ButtonStyle,
   StringSelectMenuBuilder,
   ChannelSelectMenuBuilder,
-  RoleSelectMenuBuilder,
   UserSelectMenuBuilder,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
   ChannelType,
 } = require('discord.js');
+
+const { config } = require('./config');
 
 function createPanel() {
   const embed = new EmbedBuilder()
@@ -76,13 +77,27 @@ function createRoleSelectMenu(guild) {
   );
 }
 
-function createCampaignRoleSelectMenu() {
+function createCampaignRoleSelectMenu(guild) {
+  const roles = guild.roles.cache
+    .filter((role) => {
+      if (role.managed) return false;
+      if (role.name === '@everyone') return false;
+      return role.name.startsWith(config.CAMPAIGN_ROLE_PREFIX);
+    })
+    .sort((a, b) => b.position - a.position)
+    .map((role) => ({
+      label: role.name.slice(0, 100),
+      value: role.id,
+    }))
+    .slice(0, 25);
+
+  if (!roles.length) return null;
+
   return new ActionRowBuilder().addComponents(
-    new RoleSelectMenuBuilder()
+    new StringSelectMenuBuilder()
       .setCustomId('campaign_manage_role_select')
       .setPlaceholder('Выберите роль кампании')
-      .setMinValues(1)
-      .setMaxValues(1)
+      .addOptions(roles)
   );
 }
 
@@ -240,10 +255,10 @@ function createCampaignNameModal() {
 
   const roleInput = new TextInputBuilder()
     .setCustomId('campaign_role_name')
-    .setLabel('Название роли кампании')
+    .setLabel(`Название роли: ${config.CAMPAIGN_ROLE_PREFIX}...`)
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
-    .setPlaceholder('Например: shard_binder');
+    .setPlaceholder(`${config.CAMPAIGN_ROLE_PREFIX}shard_binder`);
 
   modal.addComponents(
     new ActionRowBuilder().addComponents(titleInput),

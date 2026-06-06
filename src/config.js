@@ -20,6 +20,7 @@ const config = {
   DUNGEON_MASTER_ROLE_ID: process.env.DUNGEON_MASTER_ROLE_ID,
   OWNER_USER_ID: process.env.OWNER_USER_ID,
   AUDIT_CHANNEL_ID: process.env.AUDIT_CHANNEL_ID,
+  CAMPAIGN_ROLE_PREFIX: process.env.CAMPAIGN_ROLE_PREFIX || 'camp_',
 };
 
 module.exports = { config };
