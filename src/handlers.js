@@ -2,9 +2,12 @@ const { EmbedBuilder, MessageFlags } = require('discord.js');
 
 const { config } = require('./config');
 const { sessions } = require('./sessions');
+
 const {
   createPanel,
   createRoleSelectMenu,
+  createCampaignRoleSelectMenu,
+  createCampaignUserSelectMenu,
   createWeekSelectMenu,
   createEventChannelSelectMenu,
   createDaySelectMenu,
@@ -17,19 +20,24 @@ const {
   createAddVoiceChannelModal,
   createCampaignBuilderButtons,
 } = require('./ui');
+
 const {
   createTicket,
   createTicketIntroEmbed,
   deleteTicketLater,
 } = require('./tickets');
+
 const { publishPoll } = require('./polls');
+
 const {
   publishEventFromInteraction,
   publishEventFromMessage,
 } = require('./events');
+
 const {
   buildCampaignSummary,
   createCampaign,
+  applyCampaignRole,
 } = require('./campaigns');
 
 function isDungeonMaster(interaction) {
@@ -130,6 +138,36 @@ async function startCampaignFlow(interaction) {
   });
 }
 
+async function startCampaignPlayersFlow(interaction, action) {
+  const ticket = await createTicket(interaction);
+
+  const session = sessions.get(interaction.user.id);
+  session.mode = 'campaign_manage_players';
+  session.manageAction = action;
+  sessions.set(interaction.user.id, session);
+
+  const title = action === 'add'
+    ? '👤 Добавление игроков'
+    : '🚪 Удаление игроков';
+
+  const description = action === 'add'
+    ? 'Шаг 1: выберите роль кампании, которую нужно выдать игрокам.'
+    : 'Шаг 1: выберите роль кампании, которую нужно снять с игроков.';
+
+  await ticket.send({
+    content: `<@${interaction.user.id}>`,
+    embeds: [
+      createTicketIntroEmbed(title, description),
+    ],
+    components: [createCampaignRoleSelectMenu()],
+  });
+
+  return interaction.reply({
+    content: `Тикет открыт: <#${ticket.id}>`,
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
 async function handleInteraction(interaction) {
   try {
     if (interaction.isChatInputCommand()) {
@@ -170,6 +208,28 @@ async function handleInteraction(interaction) {
         }
 
         return startCampaignFlow(interaction);
+      }
+
+      if (interaction.customId === 'campaign_add_players') {
+        if (!isDungeonMaster(interaction)) {
+          return interaction.reply({
+            content: 'Эта кнопка доступна только мастерам.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        return startCampaignPlayersFlow(interaction, 'add');
+      }
+
+      if (interaction.customId === 'campaign_remove_players') {
+        if (!isDungeonMaster(interaction)) {
+          return interaction.reply({
+            content: 'Эта кнопка доступна только мастерам.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        return startCampaignPlayersFlow(interaction, 'remove');
       }
 
       if (interaction.customId === 'campaign_open_name_modal') {
@@ -223,6 +283,54 @@ async function handleInteraction(interaction) {
         }
 
         return publishEventFromInteraction(interaction, session, null);
+      }
+    }
+
+    if (interaction.isRoleSelectMenu()) {
+      const session = sessions.get(interaction.user.id);
+
+      if (!session) {
+        return interaction.reply({
+          content: 'Сессия потерялась. Начни заново через панель.',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      if (interaction.customId === 'campaign_manage_role_select') {
+        session.manageRoleId = interaction.values[0];
+        sessions.set(interaction.user.id, session);
+
+        return interaction.update({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle(
+                session.manageAction === 'add'
+                  ? '👤 Добавление игроков'
+                  : '🚪 Удаление игроков'
+              )
+              .setDescription('Шаг 2: выберите игроков.')
+              .setColor(0x6d4aff),
+          ],
+          components: [createCampaignUserSelectMenu()],
+        });
+      }
+    }
+
+    if (interaction.isUserSelectMenu()) {
+      const session = sessions.get(interaction.user.id);
+
+      if (!session) {
+        return interaction.reply({
+          content: 'Сессия потерялась. Начни заново через панель.',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      if (interaction.customId === 'campaign_manage_users_select') {
+        session.manageUserIds = interaction.values;
+        sessions.set(interaction.user.id, session);
+
+        return applyCampaignRole(interaction, session);
       }
     }
 

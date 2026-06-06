@@ -9,17 +9,11 @@ const { sessions } = require('./sessions');
 const { deleteTicketLater } = require('./tickets');
 
 function normalizeChannelName(name) {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_')
-    .slice(0, 90);
+  return name.trim().toLowerCase().replace(/\s+/g, '_').slice(0, 90);
 }
 
 function buildCampaignSummary(campaign) {
-  if (!campaign?.channels?.length) {
-    return 'Каналы пока не добавлены.';
-  }
+  if (!campaign?.channels?.length) return 'Каналы пока не добавлены.';
 
   return campaign.channels
     .map((channel, index) => {
@@ -62,9 +56,7 @@ function getCampaignPermissionOverwrites(guild, roleId) {
 }
 
 async function createCampaign(interaction, session) {
-  await interaction.deferReply({
-    flags: MessageFlags.Ephemeral,
-  });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const guild = interaction.guild;
   const campaign = session.campaign;
@@ -83,13 +75,12 @@ async function createCampaign(interaction, session) {
 
   await interaction.member.roles.add(role);
 
-  const permissionOverwrites = getCampaignPermissionOverwrites(guild, role.id);
+  const overwrites = getCampaignPermissionOverwrites(guild, role.id);
 
   const category = await guild.channels.create({
     name: campaign.title,
     type: ChannelType.GuildCategory,
-    permissionOverwrites,
-    reason: `Campaign category created by ${interaction.user.tag}`,
+    permissionOverwrites: overwrites,
   });
 
   const createdChannels = [];
@@ -102,19 +93,13 @@ async function createCampaign(interaction, session) {
       type: isVoice ? ChannelType.GuildVoice : ChannelType.GuildText,
       parent: category.id,
       topic: !isVoice && item.topic ? item.topic : undefined,
-      permissionOverwrites,
-      reason: `Campaign channel created by ${interaction.user.tag}`,
-    });
-
-    await channel.setParent(category.id, {
-      lockPermissions: false,
+      permissionOverwrites: overwrites,
     });
 
     createdChannels.push(channel);
   }
 
   const ticketChannelId = session.ticketChannelId;
-
   sessions.delete(interaction.user.id);
 
   await interaction.editReply({
@@ -134,7 +119,56 @@ async function createCampaign(interaction, session) {
   await deleteTicketLater(ticketChannelId);
 }
 
+async function applyCampaignRole(interaction, session) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const role = interaction.guild.roles.cache.get(session.manageRoleId);
+
+  if (!role) {
+    return interaction.editReply('Роль не найдена. Discord опять съел реальность.');
+  }
+
+  const results = [];
+
+  for (const userId of session.manageUserIds) {
+    const member = await interaction.guild.members.fetch(userId).catch(() => null);
+
+    if (!member) {
+      results.push(`❌ <@${userId}> не найден`);
+      continue;
+    }
+
+    if (session.manageAction === 'add') {
+      await member.roles.add(role);
+      results.push(`✅ <@${userId}> получил роль <@&${role.id}>`);
+    }
+
+    if (session.manageAction === 'remove') {
+      await member.roles.remove(role);
+      results.push(`✅ у <@${userId}> снята роль <@&${role.id}>`);
+    }
+  }
+
+  const ticketChannelId = session.ticketChannelId;
+  sessions.delete(interaction.user.id);
+
+  await interaction.editReply({
+    content: [
+      session.manageAction === 'add'
+        ? 'Игроки добавлены в кампанию.'
+        : 'Игроки удалены из кампании.',
+      '',
+      ...results,
+      '',
+      'Тикет удалится через 10 секунд.',
+    ].join('\n'),
+  });
+
+  await deleteTicketLater(ticketChannelId);
+}
+
 module.exports = {
   buildCampaignSummary,
   createCampaign,
+  applyCampaignRole,
 };

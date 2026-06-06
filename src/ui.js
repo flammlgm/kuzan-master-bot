@@ -5,6 +5,8 @@ const {
   ButtonStyle,
   StringSelectMenuBuilder,
   ChannelSelectMenuBuilder,
+  RoleSelectMenuBuilder,
+  UserSelectMenuBuilder,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
@@ -35,14 +37,23 @@ function createPanel() {
     .setEmoji('🏰')
     .setStyle(ButtonStyle.Secondary);
 
+  const addPlayerButton = new ButtonBuilder()
+    .setCustomId('campaign_add_players')
+    .setLabel('Добавить игроков')
+    .setEmoji('👤')
+    .setStyle(ButtonStyle.Primary);
+
+  const removePlayerButton = new ButtonBuilder()
+    .setCustomId('campaign_remove_players')
+    .setLabel('Удалить игроков')
+    .setEmoji('🚪')
+    .setStyle(ButtonStyle.Danger);
+
   return {
     embeds: [embed],
     components: [
-      new ActionRowBuilder().addComponents(
-        pollButton,
-        eventButton,
-        campaignButton
-      ),
+      new ActionRowBuilder().addComponents(pollButton, eventButton, campaignButton),
+      new ActionRowBuilder().addComponents(addPlayerButton, removePlayerButton),
     ],
   };
 }
@@ -62,6 +73,26 @@ function createRoleSelectMenu(guild) {
       .setCustomId('select_role')
       .setPlaceholder('Выберите роль для тега')
       .addOptions(roles)
+  );
+}
+
+function createCampaignRoleSelectMenu() {
+  return new ActionRowBuilder().addComponents(
+    new RoleSelectMenuBuilder()
+      .setCustomId('campaign_manage_role_select')
+      .setPlaceholder('Выберите роль кампании')
+      .setMinValues(1)
+      .setMaxValues(1)
+  );
+}
+
+function createCampaignUserSelectMenu() {
+  return new ActionRowBuilder().addComponents(
+    new UserSelectMenuBuilder()
+      .setCustomId('campaign_manage_users_select')
+      .setPlaceholder('Выберите игроков')
+      .setMinValues(1)
+      .setMaxValues(10)
   );
 }
 
@@ -186,13 +217,13 @@ function createEventDetailsModal() {
 }
 
 function createSkipCoverButton() {
-  const button = new ButtonBuilder()
-    .setCustomId('skip_event_cover')
-    .setLabel('Создать без обложки')
-    .setEmoji('➡️')
-    .setStyle(ButtonStyle.Secondary);
-
-  return new ActionRowBuilder().addComponents(button);
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('skip_event_cover')
+      .setLabel('Создать без обложки')
+      .setEmoji('➡️')
+      .setStyle(ButtonStyle.Secondary)
+  );
 }
 
 function createCampaignNameModal() {
@@ -267,39 +298,39 @@ function createAddVoiceChannelModal() {
 }
 
 function createCampaignBuilderButtons() {
-  const addTextButton = new ButtonBuilder()
-    .setCustomId('campaign_add_text_channel')
-    .setLabel('Добавить текстовый')
-    .setEmoji('➕')
-    .setStyle(ButtonStyle.Primary);
-
-  const addVoiceButton = new ButtonBuilder()
-    .setCustomId('campaign_add_voice_channel')
-    .setLabel('Добавить голосовой')
-    .setEmoji('🔊')
-    .setStyle(ButtonStyle.Primary);
-
-  const createButton = new ButtonBuilder()
-    .setCustomId('campaign_confirm_create')
-    .setLabel('Создать кампанию')
-    .setEmoji('✅')
-    .setStyle(ButtonStyle.Success);
-
-  const cancelButton = new ButtonBuilder()
-    .setCustomId('campaign_cancel')
-    .setLabel('Отменить')
-    .setEmoji('❌')
-    .setStyle(ButtonStyle.Danger);
-
   return [
-    new ActionRowBuilder().addComponents(addTextButton, addVoiceButton),
-    new ActionRowBuilder().addComponents(createButton, cancelButton),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('campaign_add_text_channel')
+        .setLabel('Добавить текстовый')
+        .setEmoji('➕')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId('campaign_add_voice_channel')
+        .setLabel('Добавить голосовой')
+        .setEmoji('🔊')
+        .setStyle(ButtonStyle.Primary)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('campaign_confirm_create')
+        .setLabel('Создать кампанию')
+        .setEmoji('✅')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId('campaign_cancel')
+        .setLabel('Отменить')
+        .setEmoji('❌')
+        .setStyle(ButtonStyle.Danger)
+    ),
   ];
 }
 
 module.exports = {
   createPanel,
   createRoleSelectMenu,
+  createCampaignRoleSelectMenu,
+  createCampaignUserSelectMenu,
   createWeekSelectMenu,
   createEventChannelSelectMenu,
   createDaySelectMenu,
