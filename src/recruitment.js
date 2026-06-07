@@ -10,7 +10,7 @@ const { client } = require('./client');
 const { config } = require('./config');
 const { sessions } = require('./sessions');
 const { createPrivateTicket, deleteTicketLater } = require('./tickets');
-const { auditLog, userField } = require('./utils/auditLogger');
+const { auditLog, notifyOwner, userField } = require('./utils/auditLogger');
 const {
   createMyRecruitmentsSelectMenu,
   createRecruitmentManageButtons,
@@ -128,6 +128,12 @@ async function submitRecruitmentForModeration(source, session, imageBuffer = nul
   await moderationTicket.send(payload);
 
   await auditLog(client, '📢 Объявление отправлено на модерацию', [
+    { name: 'Мастер', value: userField(user) },
+    { name: 'Название', value: data.title },
+    { name: 'Тикет модерации', value: `<#${moderationTicket.id}>` },
+  ]);
+
+  await notifyOwner(client, '📢 Требуется внимание: объявление на модерации', [
     { name: 'Мастер', value: userField(user) },
     { name: 'Название', value: data.title },
     { name: 'Тикет модерации', value: `<#${moderationTicket.id}>` },

@@ -2,7 +2,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags
 const { client } = require('./client');
 const { config } = require('./config');
 const { createPrivateTicket, deleteTicketLater } = require('./tickets');
-const { auditLog, userField } = require('./utils/auditLogger');
+const { auditLog, notifyOwner, userField } = require('./utils/auditLogger');
 
 async function submitMasterApplication(interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -53,6 +53,11 @@ async function submitMasterApplication(interaction) {
   });
 
   await auditLog(client, '🧙 Новая заявка на мастера', [
+    { name: 'Пользователь', value: userField(interaction.user) },
+    { name: 'Тикет', value: `<#${ticket.id}>` },
+  ]);
+
+  await notifyOwner(client, '🧙 Требуется внимание: новая заявка на мастера', [
     { name: 'Пользователь', value: userField(interaction.user) },
     { name: 'Тикет', value: `<#${ticket.id}>` },
   ]);
