@@ -5,6 +5,7 @@ const { sessions } = require('./sessions');
 
 const {
   createPanel,
+  createPlayerPanel,
   createRoleSelectMenu,
   createCampaignRoleSelectMenu,
   createCampaignUserSelectMenu,
@@ -19,6 +20,12 @@ const {
   createAddTextChannelModal,
   createAddVoiceChannelModal,
   createCampaignBuilderButtons,
+  createMasterApplicationModal,
+  createFeedbackModal,
+  createRecruitmentBasicModal,
+  createRecruitmentDetailsModal,
+  createRecruitmentNextButton,
+  createRecruitmentCoverButtons,
 } = require('./ui');
 
 const {
@@ -28,17 +35,23 @@ const {
 } = require('./tickets');
 
 const { publishPoll } = require('./polls');
+const { publishEventFromInteraction, publishEventFromMessage } = require('./events');
+const { buildCampaignSummary, createCampaign, applyCampaignRole } = require('./campaigns');
+const { showMyRoles, showServerHelp } = require('./playerPanel');
 
 const {
-  publishEventFromInteraction,
-  publishEventFromMessage,
-} = require('./events');
+  submitMasterApplication,
+  approveMasterApplication,
+  rejectMasterApplication,
+  acknowledgeFeedback,
+} = require('./applications');
 
 const {
-  buildCampaignSummary,
-  createCampaign,
-  applyCampaignRole,
-} = require('./campaigns');
+  submitRecruitmentForModeration,
+  approveRecruitment,
+  rejectRecruitment,
+  showActiveRecruitments,
+} = require('./recruitment');
 
 function isDungeonMaster(interaction) {
   return interaction.member.roles.cache.has(config.DUNGEON_MASTER_ROLE_ID);
@@ -61,56 +74,40 @@ function createCampaignPreviewEmbed(campaign) {
 
 async function startPollFlow(interaction) {
   const ticket = await createTicket(interaction);
-
   const session = sessions.get(interaction.user.id);
+
   session.mode = 'poll';
   sessions.set(interaction.user.id, session);
 
   await ticket.send({
     content: `<@${interaction.user.id}>`,
-    embeds: [
-      createTicketIntroEmbed(
-        '📅 Создание голосования',
-        'Шаг 1: выберите роль, которую нужно тегнуть в голосовании.'
-      ),
-    ],
+    embeds: [createTicketIntroEmbed('📅 Создание голосования', 'Шаг 1: выберите роль, которую нужно тегнуть.')],
     components: [createRoleSelectMenu(interaction.guild)],
   });
 
-  return interaction.reply({
-    content: `Тикет открыт: <#${ticket.id}>`,
-    flags: MessageFlags.Ephemeral,
-  });
+  return interaction.reply({ content: `Тикет открыт: <#${ticket.id}>`, flags: MessageFlags.Ephemeral });
 }
 
 async function startEventFlow(interaction) {
   const ticket = await createTicket(interaction);
-
   const session = sessions.get(interaction.user.id);
+
   session.mode = 'event';
   sessions.set(interaction.user.id, session);
 
   await ticket.send({
     content: `<@${interaction.user.id}>`,
-    embeds: [
-      createTicketIntroEmbed(
-        '🎲 Создание события',
-        'Шаг 1: выберите роль, которую нужно тегнуть при публикации события.'
-      ),
-    ],
+    embeds: [createTicketIntroEmbed('🎲 Создание события', 'Шаг 1: выберите роль для тега.')],
     components: [createRoleSelectMenu(interaction.guild)],
   });
 
-  return interaction.reply({
-    content: `Тикет открыт: <#${ticket.id}>`,
-    flags: MessageFlags.Ephemeral,
-  });
+  return interaction.reply({ content: `Тикет открыт: <#${ticket.id}>`, flags: MessageFlags.Ephemeral });
 }
 
 async function startCampaignFlow(interaction) {
   const ticket = await createTicket(interaction);
-
   const session = sessions.get(interaction.user.id);
+
   session.mode = 'campaign';
   sessions.set(interaction.user.id, session);
 
@@ -132,10 +129,7 @@ async function startCampaignFlow(interaction) {
     ],
   });
 
-  return interaction.reply({
-    content: `Тикет открыт: <#${ticket.id}>`,
-    flags: MessageFlags.Ephemeral,
-  });
+  return interaction.reply({ content: `Тикет открыт: <#${ticket.id}>`, flags: MessageFlags.Ephemeral });
 }
 
 async function startCampaignPlayersFlow(interaction, action) {
@@ -149,30 +143,55 @@ async function startCampaignPlayersFlow(interaction, action) {
   }
 
   const ticket = await createTicket(interaction);
-
   const session = sessions.get(interaction.user.id);
+
   session.mode = 'campaign_manage_players';
   session.manageAction = action;
   sessions.set(interaction.user.id, session);
 
-  const title = action === 'add'
-    ? '👤 Добавление игроков'
-    : '🚪 Удаление игроков';
-
-  const description = action === 'add'
-    ? 'Шаг 1: выберите роль кампании, которую нужно выдать игрокам.'
-    : 'Шаг 1: выберите роль кампании, которую нужно снять с игроков.';
-
   await ticket.send({
     content: `<@${interaction.user.id}>`,
-    embeds: [createTicketIntroEmbed(title, description)],
+    embeds: [
+      createTicketIntroEmbed(
+        action === 'add' ? '👤 Добавление игроков' : '🚪 Удаление игроков',
+        action === 'add'
+          ? 'Шаг 1: выберите роль кампании, которую нужно выдать.'
+          : 'Шаг 1: выберите роль кампании, которую нужно снять.'
+      ),
+    ],
     components: [roleMenu],
   });
 
-  return interaction.reply({
-    content: `Тикет открыт: <#${ticket.id}>`,
-    flags: MessageFlags.Ephemeral,
+  return interaction.reply({ content: `Тикет открыт: <#${ticket.id}>`, flags: MessageFlags.Ephemeral });
+}
+
+async function startRecruitmentFlow(interaction) {
+  const ticket = await createTicket(interaction);
+  const session = sessions.get(interaction.user.id);
+
+  session.mode = 'recruitment';
+  session.recruitment = {};
+  sessions.set(interaction.user.id, session);
+
+  await ticket.send({
+    content: `<@${interaction.user.id}> нажми кнопку ниже, чтобы заполнить объявление о наборе.`,
+    components: [
+      {
+        type: 1,
+        components: [
+          {
+            type: 2,
+            custom_id: 'recruitment_open_basic',
+            label: 'Заполнить объявление',
+            style: 1,
+            emoji: { name: '📢' },
+          },
+        ],
+      },
+    ],
   });
+
+  return interaction.reply({ content: `Тикет открыт: <#${ticket.id}>`, flags: MessageFlags.Ephemeral });
 }
 
 async function handleInteraction(interaction) {
@@ -181,157 +200,137 @@ async function handleInteraction(interaction) {
       if (interaction.commandName === 'panel') {
         return interaction.reply(createPanel());
       }
+
+      if (interaction.commandName === 'playerpanel') {
+        return interaction.reply(createPlayerPanel());
+      }
     }
 
     if (interaction.isButton()) {
-      if (interaction.customId === 'create_week_poll') {
-        if (!isDungeonMaster(interaction)) {
-          return interaction.reply({
-            content: 'Эта кнопка доступна только мастерам.',
-            flags: MessageFlags.Ephemeral,
-          });
-        }
+      if (interaction.customId === 'player_find_game') {
+        return showActiveRecruitments(interaction);
+      }
 
+      if (interaction.customId === 'player_apply_master') {
+        return interaction.showModal(createMasterApplicationModal());
+      }
+
+      if (interaction.customId === 'player_my_roles') {
+        return showMyRoles(interaction);
+      }
+
+      if (interaction.customId === 'player_help') {
+        return showServerHelp(interaction);
+      }
+
+      if (interaction.customId === 'create_week_poll') {
+        if (!isDungeonMaster(interaction)) return interaction.reply({ content: 'Эта кнопка доступна только мастерам.', flags: MessageFlags.Ephemeral });
         return startPollFlow(interaction);
       }
 
       if (interaction.customId === 'create_event') {
-        if (!isDungeonMaster(interaction)) {
-          return interaction.reply({
-            content: 'Эта кнопка доступна только мастерам.',
-            flags: MessageFlags.Ephemeral,
-          });
-        }
-
+        if (!isDungeonMaster(interaction)) return interaction.reply({ content: 'Эта кнопка доступна только мастерам.', flags: MessageFlags.Ephemeral });
         return startEventFlow(interaction);
       }
 
-      if (interaction.customId === 'create_campaign') {
-        if (!isDungeonMaster(interaction)) {
-          return interaction.reply({
-            content: 'Эта кнопка доступна только мастерам.',
-            flags: MessageFlags.Ephemeral,
-          });
-        }
+      if (interaction.customId === 'create_recruitment') {
+        if (!isDungeonMaster(interaction)) return interaction.reply({ content: 'Эта кнопка доступна только мастерам.', flags: MessageFlags.Ephemeral });
+        return startRecruitmentFlow(interaction);
+      }
 
+      if (interaction.customId === 'create_campaign') {
+        if (!isDungeonMaster(interaction)) return interaction.reply({ content: 'Эта кнопка доступна только мастерам.', flags: MessageFlags.Ephemeral });
         return startCampaignFlow(interaction);
       }
 
       if (interaction.customId === 'campaign_add_players') {
-        if (!isDungeonMaster(interaction)) {
-          return interaction.reply({
-            content: 'Эта кнопка доступна только мастерам.',
-            flags: MessageFlags.Ephemeral,
-          });
-        }
-
+        if (!isDungeonMaster(interaction)) return interaction.reply({ content: 'Эта кнопка доступна только мастерам.', flags: MessageFlags.Ephemeral });
         return startCampaignPlayersFlow(interaction, 'add');
       }
 
       if (interaction.customId === 'campaign_remove_players') {
-        if (!isDungeonMaster(interaction)) {
-          return interaction.reply({
-            content: 'Эта кнопка доступна только мастерам.',
-            flags: MessageFlags.Ephemeral,
-          });
-        }
-
+        if (!isDungeonMaster(interaction)) return interaction.reply({ content: 'Эта кнопка доступна только мастерам.', flags: MessageFlags.Ephemeral });
         return startCampaignPlayersFlow(interaction, 'remove');
       }
 
-      if (interaction.customId === 'campaign_open_name_modal') {
-        return interaction.showModal(createCampaignNameModal());
-      }
-
-      if (interaction.customId === 'campaign_add_text_channel') {
-        return interaction.showModal(createAddTextChannelModal());
-      }
-
-      if (interaction.customId === 'campaign_add_voice_channel') {
-        return interaction.showModal(createAddVoiceChannelModal());
-      }
+      if (interaction.customId === 'campaign_open_name_modal') return interaction.showModal(createCampaignNameModal());
+      if (interaction.customId === 'campaign_add_text_channel') return interaction.showModal(createAddTextChannelModal());
+      if (interaction.customId === 'campaign_add_voice_channel') return interaction.showModal(createAddVoiceChannelModal());
 
       if (interaction.customId === 'campaign_confirm_create') {
         const session = sessions.get(interaction.user.id);
-
-        if (!session?.campaign) {
-          return interaction.reply({
-            content: 'Черновик кампании не найден. Начни заново.',
-            flags: MessageFlags.Ephemeral,
-          });
-        }
-
+        if (!session?.campaign) return interaction.reply({ content: 'Черновик кампании не найден.', flags: MessageFlags.Ephemeral });
         return createCampaign(interaction, session);
       }
 
       if (interaction.customId === 'campaign_cancel') {
         const session = sessions.get(interaction.user.id);
-
-        if (session?.ticketChannelId) {
-          await deleteTicketLater(session.ticketChannelId, 1000);
-        }
-
+        if (session?.ticketChannelId) await deleteTicketLater(session.ticketChannelId, 1000);
         sessions.delete(interaction.user.id);
+        return interaction.reply({ content: 'Создание кампании отменено.', flags: MessageFlags.Ephemeral });
+      }
 
-        return interaction.reply({
-          content: 'Создание кампании отменено.',
-          flags: MessageFlags.Ephemeral,
-        });
+      if (interaction.customId === 'recruitment_open_basic') return interaction.showModal(createRecruitmentBasicModal());
+      if (interaction.customId === 'recruitment_open_details') return interaction.showModal(createRecruitmentDetailsModal());
+
+      if (interaction.customId === 'skip_recruitment_cover') {
+        const session = sessions.get(interaction.user.id);
+        if (!session?.recruitment) return interaction.reply({ content: 'Черновик объявления не найден.', flags: MessageFlags.Ephemeral });
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        return submitRecruitmentForModeration(interaction, session, null);
       }
 
       if (interaction.customId === 'skip_event_cover') {
         const session = sessions.get(interaction.user.id);
-
-        if (!session?.event) {
-          return interaction.reply({
-            content: 'Сессия события потерялась. Начни заново через панель.',
-            flags: MessageFlags.Ephemeral,
-          });
-        }
-
+        if (!session?.event) return interaction.reply({ content: 'Сессия события потерялась.', flags: MessageFlags.Ephemeral });
         return publishEventFromInteraction(interaction, session, null);
+      }
+
+      if (interaction.customId.startsWith('master_application_approve_')) {
+        return approveMasterApplication(interaction, interaction.customId.replace('master_application_approve_', ''));
+      }
+
+      if (interaction.customId.startsWith('master_application_reject_')) {
+        const userId = interaction.customId.replace('master_application_reject_', '');
+        return interaction.showModal(createFeedbackModal(`master_application_reject_modal_${userId}`));
+      }
+
+      if (interaction.customId.startsWith('recruitment_approve_')) {
+        return approveRecruitment(interaction, interaction.customId.replace('recruitment_approve_', ''));
+      }
+
+      if (interaction.customId.startsWith('recruitment_reject_')) {
+        const recruitmentId = interaction.customId.replace('recruitment_reject_', '');
+        return interaction.showModal(createFeedbackModal(`recruitment_reject_modal_${recruitmentId}`));
+      }
+
+      if (interaction.customId.startsWith('feedback_ack_')) {
+        return acknowledgeFeedback(interaction, interaction.customId.replace('feedback_ack_', ''));
       }
     }
 
     if (interaction.isUserSelectMenu()) {
       const session = sessions.get(interaction.user.id);
-
-      if (!session) {
-        return interaction.reply({
-          content: 'Сессия потерялась. Начни заново через панель.',
-          flags: MessageFlags.Ephemeral,
-        });
-      }
+      if (!session) return interaction.reply({ content: 'Сессия потерялась.', flags: MessageFlags.Ephemeral });
 
       if (interaction.customId === 'campaign_manage_users_select') {
         session.manageUserIds = interaction.values;
         sessions.set(interaction.user.id, session);
-
         return applyCampaignRole(interaction, session);
       }
     }
 
     if (interaction.isChannelSelectMenu()) {
       const session = sessions.get(interaction.user.id);
-
-      if (!session) {
-        return interaction.reply({
-          content: 'Сессия потерялась. Начни заново через панель.',
-          flags: MessageFlags.Ephemeral,
-        });
-      }
+      if (!session) return interaction.reply({ content: 'Сессия потерялась.', flags: MessageFlags.Ephemeral });
 
       if (interaction.customId === 'event_channel_select') {
         session.eventChannelId = interaction.values[0];
         sessions.set(interaction.user.id, session);
 
         return interaction.update({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle('🎲 Создание события')
-              .setDescription('Шаг 3: выберите день проведения.')
-              .setColor(0x6d4aff),
-          ],
+          embeds: [new EmbedBuilder().setTitle('🎲 Создание события').setDescription('Шаг 3: выберите день проведения.').setColor(0x6d4aff)],
           components: [createDaySelectMenu()],
         });
       }
@@ -339,29 +338,14 @@ async function handleInteraction(interaction) {
 
     if (interaction.isStringSelectMenu()) {
       const session = sessions.get(interaction.user.id);
-
-      if (!session) {
-        return interaction.reply({
-          content: 'Сессия потерялась. Начни заново через панель.',
-          flags: MessageFlags.Ephemeral,
-        });
-      }
+      if (!session) return interaction.reply({ content: 'Сессия потерялась.', flags: MessageFlags.Ephemeral });
 
       if (interaction.customId === 'campaign_manage_role_select') {
         session.manageRoleId = interaction.values[0];
         sessions.set(interaction.user.id, session);
 
         return interaction.update({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle(
-                session.manageAction === 'add'
-                  ? '👤 Добавление игроков'
-                  : '🚪 Удаление игроков'
-              )
-              .setDescription('Шаг 2: выберите игроков.')
-              .setColor(0x6d4aff),
-          ],
+          embeds: [new EmbedBuilder().setTitle(session.manageAction === 'add' ? '👤 Добавление игроков' : '🚪 Удаление игроков').setDescription('Шаг 2: выберите игроков.').setColor(0x6d4aff)],
           components: [createCampaignUserSelectMenu()],
         });
       }
@@ -372,23 +356,13 @@ async function handleInteraction(interaction) {
 
         if (session.mode === 'event') {
           return interaction.update({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle('🎲 Создание события')
-                .setDescription('Шаг 2: выберите голосовой канал, где будет проходить событие.')
-                .setColor(0x6d4aff),
-            ],
+            embeds: [new EmbedBuilder().setTitle('🎲 Создание события').setDescription('Шаг 2: выберите голосовой канал.').setColor(0x6d4aff)],
             components: [createEventChannelSelectMenu()],
           });
         }
 
         return interaction.update({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle('📅 Создание голосования')
-              .setDescription('Шаг 2: выберите неделю для голосования.')
-              .setColor(0x6d4aff),
-          ],
+          embeds: [new EmbedBuilder().setTitle('📅 Создание голосования').setDescription('Шаг 2: выберите неделю.').setColor(0x6d4aff)],
           components: [createWeekSelectMenu()],
         });
       }
@@ -396,7 +370,6 @@ async function handleInteraction(interaction) {
       if (interaction.customId === 'select_poll_week') {
         session.week = interaction.values[0];
         sessions.set(interaction.user.id, session);
-
         return interaction.showModal(createPollExtraTextModal());
       }
 
@@ -405,12 +378,7 @@ async function handleInteraction(interaction) {
         sessions.set(interaction.user.id, session);
 
         return interaction.update({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle('🎲 Создание события')
-              .setDescription('Шаг 4: выберите время начала.')
-              .setColor(0x6d4aff),
-          ],
+          embeds: [new EmbedBuilder().setTitle('🎲 Создание события').setDescription('Шаг 4: выберите время начала.').setColor(0x6d4aff)],
           components: [createTimeSelectMenu()],
         });
       }
@@ -418,29 +386,75 @@ async function handleInteraction(interaction) {
       if (interaction.customId === 'event_time_select') {
         session.selectedHour = Number(interaction.values[0]);
         sessions.set(interaction.user.id, session);
-
         return interaction.showModal(createEventDetailsModal());
       }
     }
 
     if (interaction.isModalSubmit()) {
+      if (interaction.customId === 'master_application_modal') return submitMasterApplication(interaction);
+
+      if (interaction.customId.startsWith('master_application_reject_modal_')) {
+        const userId = interaction.customId.replace('master_application_reject_modal_', '');
+        const reason = interaction.fields.getTextInputValue('feedback_reason');
+        return rejectMasterApplication(interaction, userId, reason);
+      }
+
+      if (interaction.customId.startsWith('recruitment_reject_modal_')) {
+        const recruitmentId = interaction.customId.replace('recruitment_reject_modal_', '');
+        const reason = interaction.fields.getTextInputValue('feedback_reason');
+        return rejectRecruitment(interaction, recruitmentId, reason);
+      }
+
+      if (interaction.customId === 'recruitment_basic_modal') {
+        const session = sessions.get(interaction.user.id);
+        if (!session) return interaction.reply({ content: 'Сессия потерялась.', flags: MessageFlags.Ephemeral });
+
+        session.recruitment = {
+          title: interaction.fields.getTextInputValue('recruitment_title'),
+          system: interaction.fields.getTextInputValue('recruitment_system'),
+          format: interaction.fields.getTextInputValue('recruitment_format'),
+          payment: interaction.fields.getTextInputValue('recruitment_payment'),
+          players: interaction.fields.getTextInputValue('recruitment_players'),
+        };
+
+        sessions.set(interaction.user.id, session);
+
+        return interaction.reply({
+          content: 'Основные данные сохранены. Теперь заполни детали.',
+          components: [createRecruitmentNextButton()],
+        });
+      }
+
+      if (interaction.customId === 'recruitment_details_modal') {
+        const session = sessions.get(interaction.user.id);
+        if (!session?.recruitment) return interaction.reply({ content: 'Черновик объявления не найден.', flags: MessageFlags.Ephemeral });
+
+        session.recruitment.age = interaction.fields.getTextInputValue('recruitment_age') || '—';
+        session.recruitment.dates = interaction.fields.getTextInputValue('recruitment_dates');
+        session.recruitment.requirements = interaction.fields.getTextInputValue('recruitment_requirements') || '—';
+        session.recruitment.description = interaction.fields.getTextInputValue('recruitment_description');
+        session.awaitingRecruitmentCover = true;
+
+        sessions.set(interaction.user.id, session);
+
+        return interaction.reply({
+          content: [
+            'Теперь загрузи обложку объявления прямо сюда в тикет одним изображением.',
+            '',
+            'Или нажми кнопку ниже, чтобы отправить без обложки.',
+          ].join('\n'),
+          components: [createRecruitmentCoverButtons()],
+        });
+      }
+
       if (interaction.customId === 'campaign_name_modal') {
         const session = sessions.get(interaction.user.id);
-
-        if (!session) {
-          return interaction.reply({
-            content: 'Сессия потерялась. Начни заново через панель.',
-            flags: MessageFlags.Ephemeral,
-          });
-        }
-
-        const title = interaction.fields.getTextInputValue('campaign_title');
-        const roleName = interaction.fields.getTextInputValue('campaign_role_name');
+        if (!session) return interaction.reply({ content: 'Сессия потерялась.', flags: MessageFlags.Ephemeral });
 
         session.mode = 'campaign';
         session.campaign = {
-          title,
-          roleName,
+          title: interaction.fields.getTextInputValue('campaign_title'),
+          roleName: interaction.fields.getTextInputValue('campaign_role_name'),
           channels: [],
         };
 
@@ -454,21 +468,12 @@ async function handleInteraction(interaction) {
 
       if (interaction.customId === 'add_text_channel_modal') {
         const session = sessions.get(interaction.user.id);
-
-        if (!session?.campaign) {
-          return interaction.reply({
-            content: 'Черновик кампании не найден.',
-            flags: MessageFlags.Ephemeral,
-          });
-        }
-
-        const name = interaction.fields.getTextInputValue('channel_name');
-        const topic = interaction.fields.getTextInputValue('channel_topic') || '';
+        if (!session?.campaign) return interaction.reply({ content: 'Черновик кампании не найден.', flags: MessageFlags.Ephemeral });
 
         session.campaign.channels.push({
           type: 'text',
-          name,
-          topic,
+          name: interaction.fields.getTextInputValue('channel_name'),
+          topic: interaction.fields.getTextInputValue('channel_topic') || '',
         });
 
         sessions.set(interaction.user.id, session);
@@ -481,19 +486,11 @@ async function handleInteraction(interaction) {
 
       if (interaction.customId === 'add_voice_channel_modal') {
         const session = sessions.get(interaction.user.id);
-
-        if (!session?.campaign) {
-          return interaction.reply({
-            content: 'Черновик кампании не найден.',
-            flags: MessageFlags.Ephemeral,
-          });
-        }
-
-        const name = interaction.fields.getTextInputValue('channel_name');
+        if (!session?.campaign) return interaction.reply({ content: 'Черновик кампании не найден.', flags: MessageFlags.Ephemeral });
 
         session.campaign.channels.push({
           type: 'voice',
-          name,
+          name: interaction.fields.getTextInputValue('channel_name'),
         });
 
         sessions.set(interaction.user.id, session);
@@ -506,60 +503,30 @@ async function handleInteraction(interaction) {
 
       if (interaction.customId === 'poll_extra_text_modal') {
         const session = sessions.get(interaction.user.id);
+        if (!session?.roleId || !session?.week) return interaction.reply({ content: 'Не хватает данных.', flags: MessageFlags.Ephemeral });
 
-        if (!session?.roleId || !session?.week) {
-          return interaction.reply({
-            content: 'Не хватает данных. Начни заново через панель.',
-            flags: MessageFlags.Ephemeral,
-          });
-        }
-
-        const extraText = interaction.fields.getTextInputValue('extra_text') || '';
-
-        return publishPoll(interaction, session, extraText);
+        return publishPoll(interaction, session, interaction.fields.getTextInputValue('extra_text') || '');
       }
 
       if (interaction.customId === 'event_details_modal') {
         const session = sessions.get(interaction.user.id);
+        if (!session?.roleId) return interaction.reply({ content: 'Не хватает данных.', flags: MessageFlags.Ephemeral });
 
-        if (!session?.roleId) {
-          return interaction.reply({
-            content: 'Не хватает данных. Начни заново через панель.',
-            flags: MessageFlags.Ephemeral,
-          });
-        }
+        const durationHours = Number(interaction.fields.getTextInputValue('event_duration'));
 
-        const title = interaction.fields.getTextInputValue('event_title');
-        const durationRaw = interaction.fields.getTextInputValue('event_duration');
-        const description =
-          interaction.fields.getTextInputValue('event_description') || '';
-
-        const durationHours = Number(durationRaw);
-
-        if (
-          !session.eventChannelId ||
-          typeof session.selectedDayOffset !== 'number' ||
-          typeof session.selectedHour !== 'number' ||
-          !durationHours ||
-          durationHours <= 0
-        ) {
-          return interaction.reply({
-            content: 'Не хватает данных для события или неверно указана длительность.',
-            flags: MessageFlags.Ephemeral,
-          });
+        if (!session.eventChannelId || typeof session.selectedDayOffset !== 'number' || typeof session.selectedHour !== 'number' || !durationHours || durationHours <= 0) {
+          return interaction.reply({ content: 'Не хватает данных для события или неверно указана длительность.', flags: MessageFlags.Ephemeral });
         }
 
         const startDate = new Date();
         startDate.setDate(startDate.getDate() + session.selectedDayOffset);
         startDate.setHours(session.selectedHour, 0, 0, 0);
 
-        const endDate = new Date(
-          startDate.getTime() + durationHours * 60 * 60 * 1000
-        );
+        const endDate = new Date(startDate.getTime() + durationHours * 60 * 60 * 1000);
 
         session.event = {
-          title,
-          description,
+          title: interaction.fields.getTextInputValue('event_title'),
+          description: interaction.fields.getTextInputValue('event_description') || '',
           startDate: startDate.toISOString(),
           endDate: endDate.toISOString(),
           channelId: session.eventChannelId,
@@ -568,11 +535,7 @@ async function handleInteraction(interaction) {
         sessions.set(interaction.user.id, session);
 
         return interaction.reply({
-          content: [
-            'Теперь загрузи обложку события прямо сюда в тикет одним изображением.',
-            '',
-            'Или нажми кнопку ниже, чтобы создать событие без обложки.',
-          ].join('\n'),
+          content: ['Теперь загрузи обложку события прямо сюда.', '', 'Или нажми кнопку ниже, чтобы создать без обложки.'].join('\n'),
           components: [createSkipCoverButton()],
         });
       }
@@ -582,16 +545,10 @@ async function handleInteraction(interaction) {
 
     try {
       if (interaction.replied || interaction.deferred) {
-        return interaction.followUp({
-          content: 'Что-то сломалось. Смотри терминал.',
-          flags: MessageFlags.Ephemeral,
-        });
+        return interaction.followUp({ content: 'Что-то сломалось. Смотри терминал.', flags: MessageFlags.Ephemeral });
       }
 
-      return interaction.reply({
-        content: 'Что-то сломалось. Смотри терминал.',
-        flags: MessageFlags.Ephemeral,
-      });
+      return interaction.reply({ content: 'Что-то сломалось. Смотри терминал.', flags: MessageFlags.Ephemeral });
     } catch (replyError) {
       console.error('Не удалось ответить interaction:', replyError);
     }
@@ -604,26 +561,29 @@ async function handleMessage(message) {
 
     const session = sessions.get(message.author.id);
 
-    if (!session?.event) return;
+    if (!session) return;
     if (message.channel.id !== session.ticketChannelId) return;
 
     const attachment = message.attachments.first();
-
     if (!attachment) return;
 
     const isImage = attachment.contentType?.startsWith('image/');
 
     if (!isImage) {
-      return message.reply(
-        'Это не похоже на изображение. Загрузи PNG/JPG/WebP.'
-      );
+      return message.reply('Это не похоже на изображение. Загрузи PNG/JPG/WebP.');
     }
 
     const response = await fetch(attachment.url);
     const arrayBuffer = await response.arrayBuffer();
     const imageBuffer = Buffer.from(arrayBuffer);
 
-    return publishEventFromMessage(message, session, imageBuffer);
+    if (session?.event) {
+      return publishEventFromMessage(message, session, imageBuffer);
+    }
+
+    if (session?.recruitment && session.awaitingRecruitmentCover) {
+      return submitRecruitmentForModeration(message, session, imageBuffer);
+    }
   } catch (error) {
     console.error('Ошибка обработки сообщения:', error);
     return message.reply('Не смог обработать сообщение. Смотри терминал.');

@@ -6,6 +6,11 @@ const commands = [
     .setName('panel')
     .setDescription('Создать панель мастера')
     .toJSON(),
+
+  new SlashCommandBuilder()
+    .setName('playerpanel')
+    .setDescription('Создать панель игрока')
+    .toJSON(),
 ];
 
 const rest = new REST({ version: '10' }).setToken(config.DISCORD_TOKEN);
