@@ -336,16 +336,16 @@ function createRecruitmentBasicModal() {
       new TextInputBuilder().setCustomId('recruitment_title').setLabel('Название').setStyle(TextInputStyle.Short).setRequired(true)
     ),
     new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('recruitment_system').setLabel('Система').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('D&D 5e / Pathfinder / Call of Cthulhu')
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('recruitment_format').setLabel('Формат').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('Ваншот / кампания')
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('recruitment_payment').setLabel('Оплата').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('Бесплатная / платная 500р')
+      new TextInputBuilder().setCustomId('recruitment_system').setLabel('Система').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('D&D 5e / авторская / Pathfinder / другое')
     ),
     new ActionRowBuilder().addComponents(
       new TextInputBuilder().setCustomId('recruitment_players').setLabel('Количество игроков').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('4-5 игроков')
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('recruitment_age').setLabel('Возрастное ограничение').setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder('16+ / 18+ / нет')
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('recruitment_dates').setLabel('Примерные даты / расписание').setStyle(TextInputStyle.Paragraph).setRequired(true)
     )
   );
 
@@ -355,35 +355,75 @@ function createRecruitmentBasicModal() {
 function createRecruitmentDetailsModal() {
   const modal = new ModalBuilder()
     .setCustomId('recruitment_details_modal')
-    .setTitle('Детали набора');
+    .setTitle('Описание набора');
 
   modal.addComponents(
     new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('recruitment_age').setLabel('Возрастное ограничение').setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder('16+ / 18+ / нет')
+      new TextInputBuilder()
+        .setCustomId('recruitment_requirements')
+        .setLabel('Требования к игрокам')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false)
+        .setPlaceholder('Опыт, микрофон, пунктуальность, стиль игры.')
     ),
     new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('recruitment_dates').setLabel('Примерные даты / расписание').setStyle(TextInputStyle.Paragraph).setRequired(true)
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('recruitment_requirements').setLabel('Требования к игрокам').setStyle(TextInputStyle.Paragraph).setRequired(false)
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('recruitment_description').setLabel('Описание').setStyle(TextInputStyle.Paragraph).setRequired(true)
+      new TextInputBuilder()
+        .setCustomId('recruitment_description')
+        .setLabel('Описание игры')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setPlaceholder('О чём игра, какой вайб, кого ждёшь.')
     )
   );
 
   return modal;
 }
 
-function createRecruitmentNextButton() {
+function createRecruitmentFormatSelect(value) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('recruitment_open_details').setLabel('Заполнить детали').setEmoji('➡️').setStyle(ButtonStyle.Primary)
+    new StringSelectMenuBuilder()
+      .setCustomId('recruitment_format_select')
+      .setPlaceholder('Выберите формат')
+      .addOptions([
+        { label: 'Ваншот', value: 'ваншот', emoji: '🏠', default: value === 'ваншот' },
+        { label: 'Кампания', value: 'кампания', emoji: '🏰', default: value === 'кампания' },
+      ])
   );
+}
+
+function createRecruitmentPaymentSelect(value) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('recruitment_payment_select')
+      .setPlaceholder('Выберите оплату')
+      .addOptions([
+        { label: 'Бесплатная игра', value: 'бесплатная_игра', emoji: '🧾', default: value === 'бесплатная_игра' },
+        { label: 'Платная игра', value: 'платная_игра', emoji: '💵', default: value === 'платная_игра' },
+      ])
+  );
+}
+
+function createRecruitmentSelectRows(recruitment = {}) {
+  return [
+    createRecruitmentFormatSelect(recruitment.formatTag),
+    createRecruitmentPaymentSelect(recruitment.paymentTag),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('recruitment_open_details')
+        .setLabel('Заполнить описание')
+        .setEmoji('➡️')
+        .setStyle(ButtonStyle.Primary)
+    ),
+  ];
 }
 
 function createRecruitmentCoverButtons() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('skip_recruitment_cover').setLabel('Без обложки').setEmoji('➡️').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder()
+      .setCustomId('skip_recruitment_cover')
+      .setLabel('Без обложки')
+      .setEmoji('➡️')
+      .setStyle(ButtonStyle.Secondary)
   );
 }
 
@@ -408,6 +448,6 @@ module.exports = {
   createFeedbackModal,
   createRecruitmentBasicModal,
   createRecruitmentDetailsModal,
-  createRecruitmentNextButton,
+  createRecruitmentSelectRows,
   createRecruitmentCoverButtons,
 };

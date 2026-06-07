@@ -24,7 +24,7 @@ const {
   createFeedbackModal,
   createRecruitmentBasicModal,
   createRecruitmentDetailsModal,
-  createRecruitmentNextButton,
+  createRecruitmentSelectRows,
   createRecruitmentCoverButtons,
 } = require('./ui');
 
@@ -70,6 +70,20 @@ function createCampaignPreviewEmbed(campaign) {
       ].join('\n')
     )
     .setColor(0x6d4aff);
+}
+
+function createRecruitmentPreviewText(recruitment) {
+  return [
+    `**Название:** ${recruitment.title || '—'}`,
+    `**Система:** ${recruitment.system || '—'}`,
+    `**Формат:** ${recruitment.formatTag || '—'}`,
+    `**Оплата:** ${recruitment.paymentTag || '—'}`,
+    `**Игроки:** ${recruitment.players || '—'}`,
+    `**Возраст:** ${recruitment.age || '—'}`,
+    `**Даты:** ${recruitment.dates || '—'}`,
+    '',
+    'Выбери формат и оплату. После этого нажми **Заполнить описание**.',
+  ].join('\n');
 }
 
 async function startPollFlow(interaction) {
@@ -207,21 +221,10 @@ async function handleInteraction(interaction) {
     }
 
     if (interaction.isButton()) {
-      if (interaction.customId === 'player_find_game') {
-        return showActiveRecruitments(interaction);
-      }
-
-      if (interaction.customId === 'player_apply_master') {
-        return interaction.showModal(createMasterApplicationModal());
-      }
-
-      if (interaction.customId === 'player_my_roles') {
-        return showMyRoles(interaction);
-      }
-
-      if (interaction.customId === 'player_help') {
-        return showServerHelp(interaction);
-      }
+      if (interaction.customId === 'player_find_game') return showActiveRecruitments(interaction);
+      if (interaction.customId === 'player_apply_master') return interaction.showModal(createMasterApplicationModal());
+      if (interaction.customId === 'player_my_roles') return showMyRoles(interaction);
+      if (interaction.customId === 'player_help') return showServerHelp(interaction);
 
       if (interaction.customId === 'create_week_poll') {
         if (!isDungeonMaster(interaction)) return interaction.reply({ content: 'Эта кнопка доступна только мастерам.', flags: MessageFlags.Ephemeral });
@@ -271,7 +274,23 @@ async function handleInteraction(interaction) {
       }
 
       if (interaction.customId === 'recruitment_open_basic') return interaction.showModal(createRecruitmentBasicModal());
-      if (interaction.customId === 'recruitment_open_details') return interaction.showModal(createRecruitmentDetailsModal());
+
+      if (interaction.customId === 'recruitment_open_details') {
+        const session = sessions.get(interaction.user.id);
+
+        if (!session?.recruitment) {
+          return interaction.reply({ content: 'Черновик объявления не найден.', flags: MessageFlags.Ephemeral });
+        }
+
+        if (!session.recruitment.formatTag || !session.recruitment.paymentTag) {
+          return interaction.reply({
+            content: 'Сначала выбери формат и оплату.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        return interaction.showModal(createRecruitmentDetailsModal());
+      }
 
       if (interaction.customId === 'skip_recruitment_cover') {
         const session = sessions.get(interaction.user.id);
@@ -339,6 +358,26 @@ async function handleInteraction(interaction) {
     if (interaction.isStringSelectMenu()) {
       const session = sessions.get(interaction.user.id);
       if (!session) return interaction.reply({ content: 'Сессия потерялась.', flags: MessageFlags.Ephemeral });
+
+      if (interaction.customId === 'recruitment_format_select') {
+        session.recruitment.formatTag = interaction.values[0];
+        sessions.set(interaction.user.id, session);
+
+        return interaction.update({
+          content: createRecruitmentPreviewText(session.recruitment),
+          components: createRecruitmentSelectRows(session.recruitment),
+        });
+      }
+
+      if (interaction.customId === 'recruitment_payment_select') {
+        session.recruitment.paymentTag = interaction.values[0];
+        sessions.set(interaction.user.id, session);
+
+        return interaction.update({
+          content: createRecruitmentPreviewText(session.recruitment),
+          components: createRecruitmentSelectRows(session.recruitment),
+        });
+      }
 
       if (interaction.customId === 'campaign_manage_role_select') {
         session.manageRoleId = interaction.values[0];
@@ -412,16 +451,16 @@ async function handleInteraction(interaction) {
         session.recruitment = {
           title: interaction.fields.getTextInputValue('recruitment_title'),
           system: interaction.fields.getTextInputValue('recruitment_system'),
-          format: interaction.fields.getTextInputValue('recruitment_format'),
-          payment: interaction.fields.getTextInputValue('recruitment_payment'),
           players: interaction.fields.getTextInputValue('recruitment_players'),
+          age: interaction.fields.getTextInputValue('recruitment_age') || '—',
+          dates: interaction.fields.getTextInputValue('recruitment_dates'),
         };
 
         sessions.set(interaction.user.id, session);
 
         return interaction.reply({
-          content: 'Основные данные сохранены. Теперь заполни детали.',
-          components: [createRecruitmentNextButton()],
+          content: createRecruitmentPreviewText(session.recruitment),
+          components: createRecruitmentSelectRows(session.recruitment),
         });
       }
 
@@ -429,8 +468,6 @@ async function handleInteraction(interaction) {
         const session = sessions.get(interaction.user.id);
         if (!session?.recruitment) return interaction.reply({ content: 'Черновик объявления не найден.', flags: MessageFlags.Ephemeral });
 
-        session.recruitment.age = interaction.fields.getTextInputValue('recruitment_age') || '—';
-        session.recruitment.dates = interaction.fields.getTextInputValue('recruitment_dates');
         session.recruitment.requirements = interaction.fields.getTextInputValue('recruitment_requirements') || '—';
         session.recruitment.description = interaction.fields.getTextInputValue('recruitment_description');
         session.awaitingRecruitmentCover = true;

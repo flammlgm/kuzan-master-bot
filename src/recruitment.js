@@ -18,12 +18,30 @@ function createRecruitmentId() {
   return `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
 }
 
-function getForumTagIdsByNames(forum, names) {
-  const lowerNames = names.map((name) => name.toLowerCase());
+function normalizeTagName(name) {
+  return name.toLowerCase().replace(/\s+/g, '_');
+}
 
+function tagMatches(tagName, target) {
+  return normalizeTagName(tagName).includes(normalizeTagName(target));
+}
+
+function getForumTagIdsByNames(forum, names) {
   return forum.availableTags
-    .filter((tag) => lowerNames.includes(tag.name.toLowerCase()))
+    .filter((tag) => names.some((name) => tagMatches(tag.name, name)))
     .map((tag) => tag.id);
+}
+
+function getPaymentLabel(paymentTag) {
+  if (paymentTag === 'платная_игра') return 'Платная';
+  if (paymentTag === 'бесплатная_игра') return 'Бесплатная';
+  return '—';
+}
+
+function getFormatLabel(formatTag) {
+  if (formatTag === 'ваншот') return 'Ваншот';
+  if (formatTag === 'кампания') return 'Кампания';
+  return '—';
 }
 
 function createRecruitmentEmbed(data, author) {
@@ -32,8 +50,8 @@ function createRecruitmentEmbed(data, author) {
     .setColor(0x6d4aff)
     .addFields(
       { name: 'Система', value: data.system || '—', inline: true },
-      { name: 'Формат', value: data.format || '—', inline: true },
-      { name: 'Оплата', value: data.payment || '—', inline: true },
+      { name: 'Формат', value: getFormatLabel(data.formatTag), inline: true },
+      { name: 'Оплата', value: getPaymentLabel(data.paymentTag), inline: true },
       { name: 'Игроки', value: data.players || '—', inline: true },
       { name: 'Возрастное ограничение', value: data.age || '—', inline: true },
       { name: 'Даты / расписание', value: data.dates || '—' },
@@ -53,6 +71,7 @@ function createRecruitmentEmbed(data, author) {
 async function submitRecruitmentForModeration(source, session, imageBuffer = null) {
   const guild = source.guild;
   const user = source.user || source.author;
+  const originalTicketChannelId = session.ticketChannelId;
 
   const recruitmentId = createRecruitmentId();
 
@@ -67,7 +86,7 @@ async function submitRecruitmentForModeration(source, session, imageBuffer = nul
     imageBuffer,
   });
 
-  const ticket = await createPrivateTicket(guild, {
+  const moderationTicket = await createPrivateTicket(guild, {
     userIds: [user.id, config.OWNER_USER_ID],
     prefix: 'recruitment',
   });
@@ -97,21 +116,31 @@ async function submitRecruitmentForModeration(source, session, imageBuffer = nul
     payload.files = [{ attachment: imageBuffer, name: 'cover.png' }];
   }
 
-  await ticket.send(payload);
+  await moderationTicket.send(payload);
 
   await auditLog(client, '📢 Объявление отправлено на модерацию', [
     { name: 'Мастер', value: userField(user) },
     { name: 'Название', value: data.title },
-    { name: 'Тикет', value: `<#${ticket.id}>` },
+    { name: 'Тикет модерации', value: `<#${moderationTicket.id}>` },
   ]);
 
   sessions.delete(user.id);
 
+  const responseText = [
+    `Объявление отправлено на модерацию: <#${moderationTicket.id}>`,
+    '',
+    'Этот тикет закроется через 10 секунд.',
+  ].join('\n');
+
   if (source.editReply) {
-    return source.editReply(`Объявление отправлено на модерацию: <#${ticket.id}>`);
+    await source.editReply(responseText);
+  } else {
+    await source.reply(responseText);
   }
 
-  return source.reply(`Объявление отправлено на модерацию: <#${ticket.id}>`);
+  if (originalTicketChannelId && originalTicketChannelId !== moderationTicket.id) {
+    await deleteTicketLater(originalTicketChannelId, 10000);
+  }
 }
 
 async function approveRecruitment(interaction, recruitmentId) {
@@ -139,12 +168,11 @@ async function approveRecruitment(interaction, recruitmentId) {
   const author = await client.users.fetch(data.authorId).catch(() => null);
   const embed = createRecruitmentEmbed(data, author || interaction.user);
 
-  const tagNames = ['набор_игроков'];
-
-  if (data.format?.toLowerCase().includes('ваншот')) tagNames.push('ваншот');
-  if (data.format?.toLowerCase().includes('кампан')) tagNames.push('кампания');
-  if (data.payment?.toLowerCase().includes('плат')) tagNames.push('платная_игра');
-  if (data.payment?.toLowerCase().includes('бесплат')) tagNames.push('бесплатная_игра');
+  const tagNames = [
+    'набор_игроков',
+    data.formatTag,
+    data.paymentTag,
+  ].filter(Boolean);
 
   const appliedTags = getForumTagIdsByNames(forum, tagNames);
 
@@ -180,6 +208,8 @@ async function approveRecruitment(interaction, recruitmentId) {
       '✅ Объявление одобрено и опубликовано.',
       '',
       `Публикация: ${thread.url}`,
+      '',
+      'Нажми **Ознакомлен**, чтобы закрыть тикет.',
     ].join('\n'),
     components: [row],
   });
@@ -224,6 +254,8 @@ async function rejectRecruitment(interaction, recruitmentId, reason) {
       '',
       '**Причина:**',
       reason || 'Причина не указана.',
+      '',
+      'Нажми **Ознакомлен**, чтобы закрыть тикет.',
     ].join('\n'),
     components: [row],
   });
@@ -254,12 +286,14 @@ async function showActiveRecruitments(interaction) {
 
   const threads = [...active.threads.values()]
     .filter((thread) => {
-      const tagNames = thread.appliedTags.map((id) => tagById.get(id));
+      const tagNames = thread.appliedTags
+        .map((id) => tagById.get(id))
+        .filter(Boolean);
 
       return (
-        tagNames.includes('набор_игроков') &&
-        !tagNames.includes('закрыто') &&
-        !tagNames.includes('архив')
+        tagNames.some((name) => tagMatches(name, 'набор_игроков')) &&
+        !tagNames.some((name) => tagMatches(name, 'закрыто')) &&
+        !tagNames.some((name) => tagMatches(name, 'архив'))
       );
     })
     .slice(0, 15);
