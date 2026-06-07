@@ -51,6 +51,11 @@ const {
   approveRecruitment,
   rejectRecruitment,
   showActiveRecruitments,
+  showMyRecruitments,
+  selectMyRecruitment,
+  closeMyRecruitment,
+  setRecruitmentFormatTag,
+  setRecruitmentPaymentTag,
 } = require('./recruitment');
 
 function isDungeonMaster(interaction) {
@@ -241,6 +246,17 @@ async function handleInteraction(interaction) {
         return startRecruitmentFlow(interaction);
       }
 
+      if (interaction.customId === 'my_recruitments') {
+        if (!isDungeonMaster(interaction)) return interaction.reply({ content: 'Эта кнопка доступна только мастерам.', flags: MessageFlags.Ephemeral });
+        return showMyRecruitments(interaction);
+      }
+
+      if (interaction.customId === 'my_recruitment_close') return closeMyRecruitment(interaction);
+      if (interaction.customId === 'my_recruitment_set_oneshot') return setRecruitmentFormatTag(interaction, 'ваншот');
+      if (interaction.customId === 'my_recruitment_set_campaign') return setRecruitmentFormatTag(interaction, 'кампания');
+      if (interaction.customId === 'my_recruitment_set_free') return setRecruitmentPaymentTag(interaction, 'бесплатная_игра');
+      if (interaction.customId === 'my_recruitment_set_paid') return setRecruitmentPaymentTag(interaction, 'платная_игра');
+
       if (interaction.customId === 'create_campaign') {
         if (!isDungeonMaster(interaction)) return interaction.reply({ content: 'Эта кнопка доступна только мастерам.', flags: MessageFlags.Ephemeral });
         return startCampaignFlow(interaction);
@@ -357,6 +373,11 @@ async function handleInteraction(interaction) {
 
     if (interaction.isStringSelectMenu()) {
       const session = sessions.get(interaction.user.id);
+
+      if (interaction.customId === 'my_recruitment_select') {
+        return selectMyRecruitment(interaction, interaction.values[0]);
+      }
+
       if (!session) return interaction.reply({ content: 'Сессия потерялась.', flags: MessageFlags.Ephemeral });
 
       if (interaction.customId === 'recruitment_format_select') {

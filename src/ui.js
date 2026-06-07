@@ -26,7 +26,8 @@ function createPanel() {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('create_week_poll').setLabel('Создать голосование').setEmoji('📅').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('create_event').setLabel('Создать событие').setEmoji('🎲').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('create_recruitment').setLabel('Создать объявление').setEmoji('📢').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('create_recruitment').setLabel('Создать объявление').setEmoji('📢').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('my_recruitments').setLabel('Мои объявления').setEmoji('📋').setStyle(ButtonStyle.Secondary)
       ),
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('create_campaign').setLabel('Создать кампанию').setEmoji('🏰').setStyle(ButtonStyle.Secondary),
@@ -427,6 +428,54 @@ function createRecruitmentCoverButtons() {
   );
 }
 
+function createMyRecruitmentsSelectMenu(threads) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('my_recruitment_select')
+      .setPlaceholder('Выберите объявление')
+      .addOptions(
+        threads.slice(0, 25).map((thread) => ({
+          label: thread.name.slice(0, 100),
+          value: thread.id,
+        }))
+      )
+  );
+}
+
+function createRecruitmentManageButtons() {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('my_recruitment_close')
+        .setLabel('Закрыть набор')
+        .setEmoji('🔒')
+        .setStyle(ButtonStyle.Danger)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('my_recruitment_set_oneshot')
+        .setLabel('Ваншот')
+        .setEmoji('🏠')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('my_recruitment_set_campaign')
+        .setLabel('Кампания')
+        .setEmoji('🏰')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('my_recruitment_set_free')
+        .setLabel('Бесплатная')
+        .setEmoji('🧾')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('my_recruitment_set_paid')
+        .setLabel('Платная')
+        .setEmoji('💵')
+        .setStyle(ButtonStyle.Secondary)
+    ),
+  ];
+}
+
 module.exports = {
   createPanel,
   createPlayerPanel,
@@ -450,4 +499,6 @@ module.exports = {
   createRecruitmentDetailsModal,
   createRecruitmentSelectRows,
   createRecruitmentCoverButtons,
+  createMyRecruitmentsSelectMenu,
+  createRecruitmentManageButtons,
 };
