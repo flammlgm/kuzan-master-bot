@@ -18,20 +18,6 @@ function createRecruitmentId() {
   return `${Date.now()}_${Math.floor(Math.random() * 9999)}`;
 }
 
-function normalizeTagName(name) {
-  return name.toLowerCase().replace(/\s+/g, '_');
-}
-
-function tagMatches(tagName, target) {
-  return normalizeTagName(tagName).includes(normalizeTagName(target));
-}
-
-function getForumTagIdsByNames(forum, names) {
-  return forum.availableTags
-    .filter((tag) => names.some((name) => tagMatches(tag.name, name)))
-    .map((tag) => tag.id);
-}
-
 function getPaymentLabel(paymentTag) {
   if (paymentTag === 'платная_игра') return 'Платная';
   if (paymentTag === 'бесплатная_игра') return 'Бесплатная';
@@ -42,6 +28,32 @@ function getFormatLabel(formatTag) {
   if (formatTag === 'ваншот') return 'Ваншот';
   if (formatTag === 'кампания') return 'Кампания';
   return '—';
+}
+
+function getRecruitmentTagIds(data) {
+  const tags = [];
+
+  if (config.TAG_RECRUITMENT_ID) {
+    tags.push(config.TAG_RECRUITMENT_ID);
+  }
+
+  if (data.formatTag === 'ваншот' && config.TAG_ONESHOT_ID) {
+    tags.push(config.TAG_ONESHOT_ID);
+  }
+
+  if (data.formatTag === 'кампания' && config.TAG_CAMPAIGN_ID) {
+    tags.push(config.TAG_CAMPAIGN_ID);
+  }
+
+  if (data.paymentTag === 'платная_игра' && config.TAG_PAID_GAME_ID) {
+    tags.push(config.TAG_PAID_GAME_ID);
+  }
+
+  if (data.paymentTag === 'бесплатная_игра' && config.TAG_FREE_GAME_ID) {
+    tags.push(config.TAG_FREE_GAME_ID);
+  }
+
+  return [...new Set(tags)];
 }
 
 function createRecruitmentEmbed(data, author) {
@@ -168,13 +180,7 @@ async function approveRecruitment(interaction, recruitmentId) {
   const author = await client.users.fetch(data.authorId).catch(() => null);
   const embed = createRecruitmentEmbed(data, author || interaction.user);
 
-  const tagNames = [
-    'набор_игроков',
-    data.formatTag,
-    data.paymentTag,
-  ].filter(Boolean);
-
-  const appliedTags = getForumTagIdsByNames(forum, tagNames);
+  const appliedTags = getRecruitmentTagIds(data);
 
   const threadPayload = {
     name: data.title.slice(0, 100),
@@ -217,6 +223,7 @@ async function approveRecruitment(interaction, recruitmentId) {
   await auditLog(client, '✅ Объявление о наборе одобрено', [
     { name: 'Одобрил', value: userField(interaction.user) },
     { name: 'Название', value: data.title },
+    { name: 'Теги', value: appliedTags.length ? appliedTags.join('\n') : '—' },
     { name: 'Публикация', value: thread.url },
   ]);
 
@@ -286,14 +293,13 @@ async function showActiveRecruitments(interaction) {
 
   const threads = [...active.threads.values()]
     .filter((thread) => {
-      const tagNames = thread.appliedTags
-        .map((id) => tagById.get(id))
-        .filter(Boolean);
+      const tags = thread.appliedTags;
 
       return (
-        tagNames.some((name) => tagMatches(name, 'набор_игроков')) &&
-        !tagNames.some((name) => tagMatches(name, 'закрыто')) &&
-        !tagNames.some((name) => tagMatches(name, 'архив'))
+        tags.includes(config.TAG_RECRUITMENT_ID) &&
+        !tags.includes(config.TAG_ORG_QUESTION_ID) &&
+        !tags.includes('закрыто') &&
+        !tags.includes('архив')
       );
     })
     .slice(0, 15);
