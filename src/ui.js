@@ -182,12 +182,24 @@ function createCampaignEditButtons() {
   ];
 }
 
-function createCampaignChannelSelectMenu(customId) {
+function createCampaignChildChannelSelectMenu(category, customId) {
+  const channels = category.children.cache
+    .filter((channel) => [ChannelType.GuildText, ChannelType.GuildVoice, ChannelType.GuildStageVoice].includes(channel.type))
+    .sort((a, b) => a.rawPosition - b.rawPosition)
+    .map((channel) => ({
+      label: channel.name.slice(0, 100),
+      value: channel.id,
+      emoji: channel.isVoiceBased() ? '🔊' : '#️⃣',
+    }))
+    .slice(0, 25);
+
+  if (!channels.length) return null;
+
   return new ActionRowBuilder().addComponents(
-    new ChannelSelectMenuBuilder()
+    new StringSelectMenuBuilder()
       .setCustomId(customId)
       .setPlaceholder('Выберите канал этой кампании')
-      .addChannelTypes(ChannelType.GuildText, ChannelType.GuildVoice, ChannelType.GuildStageVoice)
+      .addOptions(channels)
   );
 }
 
@@ -590,7 +602,7 @@ module.exports = {
   createMasterCampaignRoleSelectMenu,
   createEditableCampaignCategorySelectMenu,
   createCampaignEditButtons,
-  createCampaignChannelSelectMenu,
+  createCampaignChildChannelSelectMenu,
   createRenameCategoryModal,
   createRenameChannelModal,
   createWeekSelectMenu,

@@ -139,7 +139,6 @@ async function createCampaign(interaction, session) {
       type: isVoice ? ChannelType.GuildVoice : ChannelType.GuildText,
       parent: category.id,
       topic: !isVoice && item.topic ? item.topic : undefined,
-      permissionOverwrites: overwrites,
     });
 
     createdChannels.push(channel);
