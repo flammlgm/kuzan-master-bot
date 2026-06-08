@@ -29,6 +29,7 @@ const config = {
   OWNER_USER_ID: process.env.OWNER_USER_ID,
   AUDIT_CHANNEL_ID: process.env.AUDIT_CHANNEL_ID,
   CAMPAIGN_ROLE_PREFIX: process.env.CAMPAIGN_ROLE_PREFIX || 'camp_',
+  MASTER_CAMPAIGN_ROLE_PREFIX: process.env.MASTER_CAMPAIGN_ROLE_PREFIX || 'master_',
 
   TAG_ONESHOT_ID: process.env.TAG_ONESHOT_ID,
   TAG_ORG_QUESTION_ID: process.env.TAG_ORG_QUESTION_ID,
