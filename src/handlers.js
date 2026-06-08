@@ -477,6 +477,31 @@ async function handleInteraction(interaction) {
       const session = sessions.get(interaction.user.id);
       if (!session) return interaction.reply({ content: 'Сессия потерялась.', flags: MessageFlags.Ephemeral });
 
+      if (interaction.customId === 'campaign_edit_rename_channel_select') {
+        const context = getEditableCampaignContext(interaction, session);
+        const channel = interaction.guild.channels.cache.get(interaction.values[0]);
+
+        if (!context || !channel || channel.parentId !== context.category.id) {
+          return interaction.reply({ content: 'Этот канал не относится к выбранной кампании или у тебя нет доступа.', flags: MessageFlags.Ephemeral });
+        }
+
+        session.editChannelId = channel.id;
+        sessions.set(interaction.user.id, session);
+        return interaction.showModal(createRenameChannelModal());
+      }
+
+      if (interaction.customId === 'campaign_edit_delete_channel_select') {
+        const context = getEditableCampaignContext(interaction, session);
+        const channel = interaction.guild.channels.cache.get(interaction.values[0]);
+
+        if (!context || !channel || channel.parentId !== context.category.id) {
+          return interaction.reply({ content: 'Этот канал не относится к выбранной кампании или у тебя нет доступа.', flags: MessageFlags.Ephemeral });
+        }
+
+        await channel.delete(`Campaign channel deleted by ${interaction.user.tag}`);
+        return interaction.update({ content: `Канал **${channel.name}** удалён.`, components: [] });
+      }
+
       if (interaction.customId === 'event_channel_select') {
         session.eventChannelId = interaction.values[0];
         sessions.set(interaction.user.id, session);
