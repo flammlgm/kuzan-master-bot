@@ -32,7 +32,8 @@ function createPanel() {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('create_campaign').setLabel('Создать кампанию').setEmoji('🏰').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('campaign_add_players').setLabel('Добавить игроков').setEmoji('👤').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('campaign_remove_players').setLabel('Удалить игроков').setEmoji('🚪').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId('campaign_remove_players').setLabel('Удалить игроков').setEmoji('🚪').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('campaign_edit').setLabel('Редактировать кампанию').setEmoji('🛠️').setStyle(ButtonStyle.Secondary)
       ),
     ],
   };
@@ -83,12 +84,24 @@ function createRoleSelectMenu(guild) {
   );
 }
 
-function createCampaignRoleSelectMenu(guild) {
+function createCampaignRoleSelectMenu(guild, member = null) {
+  const masterRoleNames = member
+    ? new Set(
+      member.roles.cache
+        .filter((role) => role.name.startsWith(config.MASTER_CAMPAIGN_ROLE_PREFIX))
+        .map((role) => role.name)
+    )
+    : null;
+
   const roles = guild.roles.cache
     .filter((role) => {
       if (role.managed) return false;
       if (role.name === '@everyone') return false;
-      return role.name.startsWith(config.CAMPAIGN_ROLE_PREFIX);
+      if (!role.name.startsWith(config.CAMPAIGN_ROLE_PREFIX)) return false;
+      if (!masterRoleNames) return true;
+
+      const suffix = role.name.slice(config.CAMPAIGN_ROLE_PREFIX.length);
+      return masterRoleNames.has(`${config.MASTER_CAMPAIGN_ROLE_PREFIX}${suffix}`);
     })
     .sort((a, b) => b.position - a.position)
     .map((role) => ({ label: role.name.slice(0, 100), value: role.id }))
@@ -112,6 +125,110 @@ function createCampaignUserSelectMenu() {
       .setMinValues(1)
       .setMaxValues(10)
   );
+}
+
+
+function createMasterCampaignRoleSelectMenu(guild, member) {
+  const roles = guild.roles.cache
+    .filter((role) => {
+      if (role.managed) return false;
+      if (!role.name.startsWith(config.MASTER_CAMPAIGN_ROLE_PREFIX)) return false;
+      return member.roles.cache.has(role.id);
+    })
+    .sort((a, b) => b.position - a.position)
+    .map((role) => ({ label: role.name.slice(0, 100), value: role.id }))
+    .slice(0, 25);
+
+  if (!roles.length) return null;
+
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('campaign_edit_master_role_select')
+      .setPlaceholder('Выберите мастерскую роль кампании')
+      .addOptions(roles)
+  );
+}
+
+function createEditableCampaignCategorySelectMenu(guild, masterRoleId) {
+  const categories = guild.channels.cache
+    .filter((channel) => channel.type === ChannelType.GuildCategory)
+    .filter((channel) => channel.permissionOverwrites.cache.has(masterRoleId))
+    .sort((a, b) => a.rawPosition - b.rawPosition)
+    .map((channel) => ({ label: channel.name.slice(0, 100), value: channel.id }))
+    .slice(0, 25);
+
+  if (!categories.length) return null;
+
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('campaign_edit_category_select')
+      .setPlaceholder('Выберите категорию кампании')
+      .addOptions(categories)
+  );
+}
+
+function createCampaignEditButtons() {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('campaign_edit_rename_category').setLabel('Переименовать категорию').setEmoji('✏️').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('campaign_edit_add_text_channel').setLabel('Добавить текстовый').setEmoji('➕').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('campaign_edit_add_voice_channel').setLabel('Добавить голосовой').setEmoji('🔊').setStyle(ButtonStyle.Primary)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('campaign_edit_rename_channel').setLabel('Переименовать канал').setEmoji('📝').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('campaign_edit_delete_channel').setLabel('Удалить канал').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('campaign_edit_cancel').setLabel('Закрыть').setEmoji('✅').setStyle(ButtonStyle.Success)
+    ),
+  ];
+}
+
+function createCampaignChildChannelSelectMenu(category, customId) {
+  const channels = category.children.cache
+    .filter((channel) => [ChannelType.GuildText, ChannelType.GuildVoice, ChannelType.GuildStageVoice].includes(channel.type))
+    .sort((a, b) => a.rawPosition - b.rawPosition)
+    .map((channel) => ({
+      label: channel.name.slice(0, 100),
+      value: channel.id,
+      emoji: channel.isVoiceBased() ? '🔊' : '#️⃣',
+    }))
+    .slice(0, 25);
+
+  if (!channels.length) return null;
+
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(customId)
+      .setPlaceholder('Выберите канал этой кампании')
+      .addOptions(channels)
+  );
+}
+
+function createRenameCategoryModal() {
+  const modal = new ModalBuilder()
+    .setCustomId('campaign_edit_rename_category_modal')
+    .setTitle('Переименовать категорию');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('category_name').setLabel('Новое название категории').setStyle(TextInputStyle.Short).setRequired(true)
+    )
+  );
+
+  return modal;
+}
+
+function createRenameChannelModal() {
+  const modal = new ModalBuilder()
+    .setCustomId('campaign_edit_rename_channel_modal')
+    .setTitle('Переименовать канал');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('channel_name').setLabel('Новое название канала').setStyle(TextInputStyle.Short).setRequired(true)
+    )
+  );
+
+  return modal;
 }
 
 function createWeekSelectMenu() {
@@ -482,6 +599,12 @@ module.exports = {
   createRoleSelectMenu,
   createCampaignRoleSelectMenu,
   createCampaignUserSelectMenu,
+  createMasterCampaignRoleSelectMenu,
+  createEditableCampaignCategorySelectMenu,
+  createCampaignEditButtons,
+  createCampaignChildChannelSelectMenu,
+  createRenameCategoryModal,
+  createRenameChannelModal,
   createWeekSelectMenu,
   createEventChannelSelectMenu,
   createDaySelectMenu,

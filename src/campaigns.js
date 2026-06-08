@@ -26,17 +26,29 @@ function buildCampaignSummary(campaign) {
     .join('\n');
 }
 
-function ensureCampaignRoleName(roleName) {
+function getCampaignRoleSuffix(roleName) {
   const trimmed = roleName.trim();
 
   if (trimmed.startsWith(config.CAMPAIGN_ROLE_PREFIX)) {
-    return trimmed;
+    return trimmed.slice(config.CAMPAIGN_ROLE_PREFIX.length);
   }
 
-  return `${config.CAMPAIGN_ROLE_PREFIX}${trimmed}`;
+  if (trimmed.startsWith(config.MASTER_CAMPAIGN_ROLE_PREFIX)) {
+    return trimmed.slice(config.MASTER_CAMPAIGN_ROLE_PREFIX.length);
+  }
+
+  return trimmed;
 }
 
-function getCampaignPermissionOverwrites(guild, roleId) {
+function ensureCampaignRoleName(roleName) {
+  return `${config.CAMPAIGN_ROLE_PREFIX}${getCampaignRoleSuffix(roleName)}`;
+}
+
+function ensureMasterCampaignRoleName(roleName) {
+  return `${config.MASTER_CAMPAIGN_ROLE_PREFIX}${getCampaignRoleSuffix(roleName)}`;
+}
+
+function getCampaignPermissionOverwrites(guild, roleId, masterRoleId) {
   return [
     {
       id: guild.id,
@@ -52,6 +64,19 @@ function getCampaignPermissionOverwrites(guild, roleId) {
         PermissionFlagsBits.Speak,
       ],
     },
+    masterRoleId
+      ? {
+        id: masterRoleId,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.ManageChannels,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.Connect,
+          PermissionFlagsBits.Speak,
+        ],
+      }
+      : null,
     {
       id: client.user.id,
       allow: [
@@ -64,7 +89,7 @@ function getCampaignPermissionOverwrites(guild, roleId) {
         PermissionFlagsBits.Speak,
       ],
     },
-  ];
+  ].filter(Boolean);
 }
 
 async function createCampaign(interaction, session) {
@@ -80,6 +105,7 @@ async function createCampaign(interaction, session) {
   }
 
   const finalRoleName = ensureCampaignRoleName(campaign.roleName);
+  const finalMasterRoleName = ensureMasterCampaignRoleName(campaign.roleName);
 
   const role = await guild.roles.create({
     name: finalRoleName,
@@ -87,9 +113,15 @@ async function createCampaign(interaction, session) {
     reason: `Campaign created by ${interaction.user.tag}`,
   });
 
-  await interaction.member.roles.add(role);
+  const masterRole = await guild.roles.create({
+    name: finalMasterRoleName,
+    mentionable: false,
+    reason: `Campaign master role created by ${interaction.user.tag}`,
+  });
 
-  const overwrites = getCampaignPermissionOverwrites(guild, role.id);
+  await interaction.member.roles.add([role, masterRole]);
+
+  const overwrites = getCampaignPermissionOverwrites(guild, role.id, masterRole.id);
 
   const category = await guild.channels.create({
     name: campaign.title,
@@ -107,7 +139,6 @@ async function createCampaign(interaction, session) {
       type: isVoice ? ChannelType.GuildVoice : ChannelType.GuildText,
       parent: category.id,
       topic: !isVoice && item.topic ? item.topic : undefined,
-      permissionOverwrites: overwrites,
     });
 
     createdChannels.push(channel);
@@ -116,7 +147,8 @@ async function createCampaign(interaction, session) {
   await auditLog(client, '🏰 Создана кампания', [
     { name: 'Мастер', value: userField(interaction.user) },
     { name: 'Категория', value: campaign.title, inline: true },
-    { name: 'Роль', value: `<@&${role.id}>`, inline: true },
+    { name: 'Роль игроков', value: `<@&${role.id}>`, inline: true },
+    { name: 'Роль мастера', value: `<@&${masterRole.id}>`, inline: true },
     {
       name: 'Каналы',
       value: createdChannels.map((channel) => `<#${channel.id}>`).join('\n'),
@@ -130,7 +162,8 @@ async function createCampaign(interaction, session) {
     content: [
       `Кампания **${campaign.title}** создана.`,
       '',
-      `Роль: <@&${role.id}>`,
+      `Роль игроков: <@&${role.id}>`,
+      `Роль мастера: <@&${masterRole.id}>`,
       `Категория: **${category.name}**`,
       '',
       '**Каналы:**',
@@ -164,6 +197,21 @@ async function applyCampaignRole(interaction, session) {
 
     return interaction.editReply({
       content: `Запрещено изменять роль <@&${role.id}> через панель мастера.`,
+    });
+  }
+
+  const expectedMasterRoleName = ensureMasterCampaignRoleName(role.name);
+  const hasCampaignMasterRole = interaction.member.roles.cache.some((memberRole) => memberRole.name === expectedMasterRoleName);
+
+  if (!hasCampaignMasterRole) {
+    await auditLog(client, '🚨 Попытка изменить чужую кампанию', [
+      { name: 'Мастер', value: userField(interaction.user) },
+      { name: 'Роль кампании', value: `${role.name} — <@&${role.id}>` },
+      { name: 'Требуемая роль мастера', value: expectedMasterRoleName },
+    ]);
+
+    return interaction.editReply({
+      content: `Ты можешь изменять игроков только в кампаниях, где у тебя есть роль \`${expectedMasterRoleName}\`.`,
     });
   }
 
@@ -233,5 +281,6 @@ async function applyCampaignRole(interaction, session) {
 module.exports = {
   buildCampaignSummary,
   createCampaign,
+  ensureMasterCampaignRoleName,
   applyCampaignRole,
 };
