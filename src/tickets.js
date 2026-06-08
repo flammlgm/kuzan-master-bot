@@ -44,7 +44,7 @@ async function createTicket(interaction) {
   return channel;
 }
 
-async function createPrivateTicket(guild, { userIds = [], prefix = 'ticket', topic } = {}) {
+async function createPrivateTicket(guild, { userIds = [], prefix = 'ticket' }) {
   const ticketNumber = Math.floor(1000 + Math.random() * 9000);
 
   const permissionOverwrites = [
@@ -81,7 +81,6 @@ async function createPrivateTicket(guild, { userIds = [], prefix = 'ticket', top
   return guild.channels.create({
     name: `${prefix}-${ticketNumber}`,
     type: ChannelType.GuildText,
-    topic,
     permissionOverwrites,
   });
 }
