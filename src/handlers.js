@@ -1,4 +1,4 @@
-const { EmbedBuilder, MessageFlags } = require('discord.js');
+const { ChannelType, EmbedBuilder, MessageFlags } = require('discord.js');
 
 const { config } = require('./config');
 const { sessions } = require('./sessions');
@@ -9,6 +9,12 @@ const {
   createRoleSelectMenu,
   createCampaignRoleSelectMenu,
   createCampaignUserSelectMenu,
+  createMasterCampaignRoleSelectMenu,
+  createEditableCampaignCategorySelectMenu,
+  createCampaignEditButtons,
+  createCampaignChannelSelectMenu,
+  createRenameCategoryModal,
+  createRenameChannelModal,
   createWeekSelectMenu,
   createEventChannelSelectMenu,
   createDaySelectMenu,
@@ -152,12 +158,68 @@ async function startCampaignFlow(interaction) {
   return interaction.reply({ content: `Тикет открыт: <#${ticket.id}>`, flags: MessageFlags.Ephemeral });
 }
 
-async function startCampaignPlayersFlow(interaction, action) {
-  const roleMenu = createCampaignRoleSelectMenu(interaction.guild);
+
+function getEditableCampaignContext(interaction, session) {
+  if (!session?.editMasterRoleId || !session?.editCategoryId) return null;
+
+  const masterRole = interaction.guild.roles.cache.get(session.editMasterRoleId);
+  const category = interaction.guild.channels.cache.get(session.editCategoryId);
+
+  if (!masterRole?.name.startsWith(config.MASTER_CAMPAIGN_ROLE_PREFIX)) return null;
+  if (!interaction.member.roles.cache.has(masterRole.id)) return null;
+  if (!category || category.type !== ChannelType.GuildCategory) return null;
+  if (!category.permissionOverwrites.cache.has(masterRole.id)) return null;
+
+  return { masterRole, category };
+}
+
+function createCampaignEditEmbed(category) {
+  const channels = category.children.cache
+    .sort((a, b) => a.rawPosition - b.rawPosition)
+    .map((channel) => `${channel.isVoiceBased() ? '🔊' : '#'} <#${channel.id}>`);
+
+  return new EmbedBuilder()
+    .setTitle('🛠️ Редактирование кампании')
+    .setDescription([
+      `**Категория:** ${category.name}`,
+      '',
+      '**Текущие каналы:**',
+      channels.length ? channels.join('\n') : 'Каналов пока нет.',
+    ].join('\n'))
+    .setColor(0x6d4aff);
+}
+
+async function startCampaignEditFlow(interaction) {
+  const roleMenu = createMasterCampaignRoleSelectMenu(interaction.guild, interaction.member);
 
   if (!roleMenu) {
     return interaction.reply({
-      content: `На сервере нет ролей кампаний с префиксом \`${config.CAMPAIGN_ROLE_PREFIX}\`.`,
+      content: `У тебя нет ролей кампаний мастера с префиксом \`${config.MASTER_CAMPAIGN_ROLE_PREFIX}\`.`,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  const ticket = await createTicket(interaction);
+  const session = sessions.get(interaction.user.id);
+
+  session.mode = 'campaign_edit';
+  sessions.set(interaction.user.id, session);
+
+  await ticket.send({
+    content: `<@${interaction.user.id}>`,
+    embeds: [createTicketIntroEmbed('🛠️ Редактирование кампании', 'Шаг 1: выберите мастерскую роль кампании.')],
+    components: [roleMenu],
+  });
+
+  return interaction.reply({ content: `Тикет открыт: <#${ticket.id}>`, flags: MessageFlags.Ephemeral });
+}
+
+async function startCampaignPlayersFlow(interaction, action) {
+  const roleMenu = createCampaignRoleSelectMenu(interaction.guild, interaction.member);
+
+  if (!roleMenu) {
+    return interaction.reply({
+      content: `Для тебя нет доступных кампаний. Нужна парная роль мастера с префиксом \`${config.MASTER_CAMPAIGN_ROLE_PREFIX}\`.`,
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -277,14 +339,46 @@ async function handleInteraction(interaction) {
         return startCampaignPlayersFlow(interaction, 'remove');
       }
 
+      if (interaction.customId === 'campaign_edit') {
+        if (!isDungeonMaster(interaction)) return interaction.reply({ content: 'Эта кнопка доступна только мастерам.', flags: MessageFlags.Ephemeral });
+        return startCampaignEditFlow(interaction);
+      }
+
       if (interaction.customId === 'campaign_open_name_modal') return interaction.showModal(createCampaignNameModal());
       if (interaction.customId === 'campaign_add_text_channel') return interaction.showModal(createAddTextChannelModal());
       if (interaction.customId === 'campaign_add_voice_channel') return interaction.showModal(createAddVoiceChannelModal());
+
+      if (interaction.customId === 'campaign_edit_rename_category') return interaction.showModal(createRenameCategoryModal());
+      if (interaction.customId === 'campaign_edit_add_text_channel') return interaction.showModal(createAddTextChannelModal());
+      if (interaction.customId === 'campaign_edit_add_voice_channel') return interaction.showModal(createAddVoiceChannelModal());
+
+      if (interaction.customId === 'campaign_edit_rename_channel') {
+        return interaction.reply({
+          content: 'Выбери канал этой кампании для переименования.',
+          components: [createCampaignChannelSelectMenu('campaign_edit_rename_channel_select')],
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      if (interaction.customId === 'campaign_edit_delete_channel') {
+        return interaction.reply({
+          content: 'Выбери канал этой кампании для удаления.',
+          components: [createCampaignChannelSelectMenu('campaign_edit_delete_channel_select')],
+          flags: MessageFlags.Ephemeral,
+        });
+      }
 
       if (interaction.customId === 'campaign_confirm_create') {
         const session = sessions.get(interaction.user.id);
         if (!session?.campaign) return interaction.reply({ content: 'Черновик кампании не найден.', flags: MessageFlags.Ephemeral });
         return createCampaign(interaction, session);
+      }
+
+      if (interaction.customId === 'campaign_edit_cancel') {
+        const session = sessions.get(interaction.user.id);
+        if (session?.ticketChannelId) await deleteTicketLater(session.ticketChannelId, 1000);
+        sessions.delete(interaction.user.id);
+        return interaction.reply({ content: 'Редактирование кампании завершено.', flags: MessageFlags.Ephemeral });
       }
 
       if (interaction.customId === 'campaign_cancel') {
@@ -365,6 +459,31 @@ async function handleInteraction(interaction) {
       const session = sessions.get(interaction.user.id);
       if (!session) return interaction.reply({ content: 'Сессия потерялась.', flags: MessageFlags.Ephemeral });
 
+      if (interaction.customId === 'campaign_edit_rename_channel_select') {
+        const context = getEditableCampaignContext(interaction, session);
+        const channel = interaction.guild.channels.cache.get(interaction.values[0]);
+
+        if (!context || !channel || channel.parentId !== context.category.id) {
+          return interaction.reply({ content: 'Этот канал не относится к выбранной кампании или у тебя нет доступа.', flags: MessageFlags.Ephemeral });
+        }
+
+        session.editChannelId = channel.id;
+        sessions.set(interaction.user.id, session);
+        return interaction.showModal(createRenameChannelModal());
+      }
+
+      if (interaction.customId === 'campaign_edit_delete_channel_select') {
+        const context = getEditableCampaignContext(interaction, session);
+        const channel = interaction.guild.channels.cache.get(interaction.values[0]);
+
+        if (!context || !channel || channel.parentId !== context.category.id) {
+          return interaction.reply({ content: 'Этот канал не относится к выбранной кампании или у тебя нет доступа.', flags: MessageFlags.Ephemeral });
+        }
+
+        await channel.delete(`Campaign channel deleted by ${interaction.user.tag}`);
+        return interaction.update({ content: `Канал **${channel.name}** удалён.`, components: [] });
+      }
+
       if (interaction.customId === 'event_channel_select') {
         session.eventChannelId = interaction.values[0];
         sessions.set(interaction.user.id, session);
@@ -402,6 +521,41 @@ async function handleInteraction(interaction) {
         return interaction.update({
           content: createRecruitmentPreviewText(session.recruitment),
           components: createRecruitmentSelectRows(session.recruitment),
+        });
+      }
+
+      if (interaction.customId === 'campaign_edit_master_role_select') {
+        session.editMasterRoleId = interaction.values[0];
+        sessions.set(interaction.user.id, session);
+
+        const categoryMenu = createEditableCampaignCategorySelectMenu(interaction.guild, session.editMasterRoleId);
+
+        if (!categoryMenu) {
+          return interaction.update({
+            embeds: [new EmbedBuilder().setTitle('🛠️ Редактирование кампании').setDescription('Для этой мастерской роли не найдены категории кампаний.').setColor(0x6d4aff)],
+            components: [],
+          });
+        }
+
+        return interaction.update({
+          embeds: [new EmbedBuilder().setTitle('🛠️ Редактирование кампании').setDescription('Шаг 2: выберите категорию кампании.').setColor(0x6d4aff)],
+          components: [categoryMenu],
+        });
+      }
+
+      if (interaction.customId === 'campaign_edit_category_select') {
+        session.editCategoryId = interaction.values[0];
+        sessions.set(interaction.user.id, session);
+
+        const context = getEditableCampaignContext(interaction, session);
+
+        if (!context) {
+          return interaction.reply({ content: 'Нет доступа к выбранной кампании.', flags: MessageFlags.Ephemeral });
+        }
+
+        return interaction.update({
+          embeds: [createCampaignEditEmbed(context.category)],
+          components: createCampaignEditButtons(),
         });
       }
 
@@ -510,6 +664,45 @@ async function handleInteraction(interaction) {
         });
       }
 
+      if (interaction.customId === 'campaign_edit_rename_category_modal') {
+        const session = sessions.get(interaction.user.id);
+        const context = getEditableCampaignContext(interaction, session);
+
+        if (!context) return interaction.reply({ content: 'Нет доступа к выбранной кампании.', flags: MessageFlags.Ephemeral });
+
+        await context.category.setName(interaction.fields.getTextInputValue('category_name'), `Campaign category renamed by ${interaction.user.tag}`);
+
+        return interaction.reply({
+          content: `Категория переименована в **${context.category.name}**.`,
+          embeds: [createCampaignEditEmbed(context.category)],
+          components: createCampaignEditButtons(),
+        });
+      }
+
+      if (interaction.customId === 'campaign_edit_rename_channel_modal') {
+        const session = sessions.get(interaction.user.id);
+        const context = getEditableCampaignContext(interaction, session);
+        const channel = interaction.guild.channels.cache.get(session?.editChannelId);
+
+        if (!context || !channel || channel.parentId !== context.category.id) {
+          return interaction.reply({ content: 'Нет доступа к выбранному каналу.', flags: MessageFlags.Ephemeral });
+        }
+
+        const newName = channel.isVoiceBased()
+          ? interaction.fields.getTextInputValue('channel_name')
+          : interaction.fields.getTextInputValue('channel_name').trim().toLowerCase().replace(/\s+/g, '_').slice(0, 90);
+
+        await channel.setName(newName, `Campaign channel renamed by ${interaction.user.tag}`);
+        delete session.editChannelId;
+        sessions.set(interaction.user.id, session);
+
+        return interaction.reply({
+          content: `Канал переименован в <#${channel.id}>.`,
+          embeds: [createCampaignEditEmbed(context.category)],
+          components: createCampaignEditButtons(),
+        });
+      }
+
       if (interaction.customId === 'campaign_name_modal') {
         const session = sessions.get(interaction.user.id);
         if (!session) return interaction.reply({ content: 'Сессия потерялась.', flags: MessageFlags.Ephemeral });
@@ -531,6 +724,27 @@ async function handleInteraction(interaction) {
 
       if (interaction.customId === 'add_text_channel_modal') {
         const session = sessions.get(interaction.user.id);
+
+        if (session?.mode === 'campaign_edit') {
+          const context = getEditableCampaignContext(interaction, session);
+
+          if (!context) return interaction.reply({ content: 'Нет доступа к выбранной кампании.', flags: MessageFlags.Ephemeral });
+
+          const channel = await interaction.guild.channels.create({
+            name: interaction.fields.getTextInputValue('channel_name').trim().toLowerCase().replace(/\s+/g, '_').slice(0, 90),
+            type: ChannelType.GuildText,
+            parent: context.category.id,
+            topic: interaction.fields.getTextInputValue('channel_topic') || undefined,
+            reason: `Campaign text channel created by ${interaction.user.tag}`,
+          });
+
+          return interaction.reply({
+            content: `Текстовый канал <#${channel.id}> создан.`,
+            embeds: [createCampaignEditEmbed(context.category)],
+            components: createCampaignEditButtons(),
+          });
+        }
+
         if (!session?.campaign) return interaction.reply({ content: 'Черновик кампании не найден.', flags: MessageFlags.Ephemeral });
 
         session.campaign.channels.push({
@@ -549,6 +763,26 @@ async function handleInteraction(interaction) {
 
       if (interaction.customId === 'add_voice_channel_modal') {
         const session = sessions.get(interaction.user.id);
+
+        if (session?.mode === 'campaign_edit') {
+          const context = getEditableCampaignContext(interaction, session);
+
+          if (!context) return interaction.reply({ content: 'Нет доступа к выбранной кампании.', flags: MessageFlags.Ephemeral });
+
+          const channel = await interaction.guild.channels.create({
+            name: interaction.fields.getTextInputValue('channel_name'),
+            type: ChannelType.GuildVoice,
+            parent: context.category.id,
+            reason: `Campaign voice channel created by ${interaction.user.tag}`,
+          });
+
+          return interaction.reply({
+            content: `Голосовой канал <#${channel.id}> создан.`,
+            embeds: [createCampaignEditEmbed(context.category)],
+            components: createCampaignEditButtons(),
+          });
+        }
+
         if (!session?.campaign) return interaction.reply({ content: 'Черновик кампании не найден.', flags: MessageFlags.Ephemeral });
 
         session.campaign.channels.push({
