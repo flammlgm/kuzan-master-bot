@@ -58,8 +58,6 @@ const {
   setRecruitmentPaymentTag,
 } = require('./recruitment');
 
-const { handleWelcomeAcknowledge } = require('./welcome');
-
 function isDungeonMaster(interaction) {
   return interaction.member.roles.cache.has(config.DUNGEON_MASTER_ROLE_ID);
 }
@@ -228,8 +226,6 @@ async function handleInteraction(interaction) {
     }
 
     if (interaction.isButton()) {
-      if (interaction.customId === 'welcome_rules_ack') return handleWelcomeAcknowledge(interaction);
-
       if (interaction.customId === 'player_find_game') return showActiveRecruitments(interaction);
       if (interaction.customId === 'player_apply_master') return interaction.showModal(createMasterApplicationModal());
       if (interaction.customId === 'player_my_roles') return showMyRoles(interaction);
