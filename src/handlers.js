@@ -38,6 +38,7 @@ const { publishPoll } = require('./polls');
 const { publishEventFromInteraction, publishEventFromMessage } = require('./events');
 const { buildCampaignSummary, createCampaign, applyCampaignRole } = require('./campaigns');
 const { showMyRoles, showServerHelp } = require('./playerPanel');
+const { acknowledgeRules, isRulesAcknowledgeButton } = require('./onboarding');
 
 const {
   submitMasterApplication,
@@ -223,6 +224,10 @@ async function handleInteraction(interaction) {
       if (interaction.commandName === 'playerpanel') {
         return interaction.reply(createPlayerPanel());
       }
+    }
+
+    if (isRulesAcknowledgeButton(interaction)) {
+      return acknowledgeRules(interaction);
     }
 
     if (interaction.isButton()) {
