@@ -16,9 +16,9 @@ function createRulesAcknowledgeButton(userId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`${RULES_ACKNOWLEDGE_PREFIX}${userId}`)
-      .setLabel('Ознакомлен с правилами')
-      .setStyle(ButtonStyle.Success)
-      .setEmoji('✅')
+      .setLabel('Нажми, чтобы получить доступ к серверу')
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji('⬜')
   );
 }
 
@@ -106,7 +106,7 @@ async function acknowledgeRules(interaction) {
 
   await disableWelcomeButton(interaction).catch(() => null);
 
-  await auditLog(client, '✅ Пользователь ознакомился с правилами', [
+  await auditLog(client, 'Пользователь ознакомился с правилами ✅', [
     { name: 'Пользователь', value: userField(interaction.user) },
     { name: 'Выдана роль', value: `<@&${config.GUILD_MEMBER_ROLE_ID}>` },
   ]);
