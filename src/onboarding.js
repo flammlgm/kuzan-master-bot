@@ -124,7 +124,9 @@ async function disableWelcomeButton(interaction) {
   const disabledButton = createRulesAcknowledgeButton(interaction.user.id);
   disabledButton.components[0]
     .setDisabled(true)
-    .setLabel('Правила подтверждены');
+    .setLabel('Правила подтверждены')
+    .setStyle(ButtonStyle.Success)
+    .setEmoji('✅')
 
   await interaction.message.edit({
     components: [disabledButton],
