@@ -11,6 +11,11 @@ const commands = [
     .setName('playerpanel')
     .setDescription('Создать панель игрока')
     .toJSON(),
+
+  new SlashCommandBuilder()
+    .setName('synccampaignmasters')
+    .setDescription('Создать недостающие master_ роли для существующих camp_ кампаний')
+    .toJSON(),
 ];
 
 const rest = new REST({ version: '10' }).setToken(config.DISCORD_TOKEN);

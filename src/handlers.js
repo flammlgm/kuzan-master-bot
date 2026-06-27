@@ -42,7 +42,7 @@ const {
 
 const { publishPoll } = require('./polls');
 const { publishEventFromInteraction, publishEventFromMessage } = require('./events');
-const { buildCampaignSummary, createCampaign, applyCampaignRole } = require('./campaigns');
+const { buildCampaignSummary, createCampaign, applyCampaignRole, syncCampaignMasterRoles } = require('./campaigns');
 const { showMyRoles, showServerHelp } = require('./playerPanel');
 const { acknowledgeRules, isRulesAcknowledgeButton } = require('./onboarding');
 
@@ -301,6 +301,10 @@ async function handleInteraction(interaction) {
 
       if (interaction.commandName === 'playerpanel') {
         return interaction.reply(createPlayerPanel());
+      }
+
+      if (interaction.commandName === 'synccampaignmasters') {
+        return syncCampaignMasterRoles(interaction);
       }
     }
 

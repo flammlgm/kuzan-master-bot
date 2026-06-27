@@ -278,9 +278,116 @@ async function applyCampaignRole(interaction, session) {
   await deleteTicketLater(ticketChannelId);
 }
 
+function getMasterCampaignOverwrite() {
+  return {
+    ViewChannel: true,
+    ManageChannels: true,
+    SendMessages: true,
+    ReadMessageHistory: true,
+    Connect: true,
+    Speak: true,
+  };
+}
+
+async function ensureMasterOverwrite(channel, masterRoleId, reason) {
+  await channel.permissionOverwrites.edit(masterRoleId, getMasterCampaignOverwrite(), { reason });
+}
+
+async function syncCampaignMasterRoles(interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  if (interaction.user.id !== config.OWNER_USER_ID) {
+    return interaction.editReply('Эта команда доступна только владельцу сервера из OWNER_USER_ID.');
+  }
+
+  const guild = interaction.guild;
+  await guild.roles.fetch();
+  await guild.channels.fetch();
+
+  const campaignRoles = guild.roles.cache
+    .filter((role) => !role.managed && role.name.startsWith(config.CAMPAIGN_ROLE_PREFIX))
+    .sort((a, b) => b.position - a.position);
+
+  if (!campaignRoles.size) {
+    return interaction.editReply(`Не нашёл ролей кампаний с префиксом \`${config.CAMPAIGN_ROLE_PREFIX}\`.`);
+  }
+
+  const createdRoles = [];
+  const existingRoles = [];
+  const updatedChannels = [];
+  const skippedChannels = [];
+
+  for (const campaignRole of campaignRoles.values()) {
+    const masterRoleName = ensureMasterCampaignRoleName(campaignRole.name);
+    let masterRole = guild.roles.cache.find((role) => role.name === masterRoleName);
+
+    if (!masterRole) {
+      masterRole = await guild.roles.create({
+        name: masterRoleName,
+        mentionable: false,
+        reason: `Campaign master role synced by ${interaction.user.tag}`,
+      });
+      createdRoles.push(masterRole);
+    } else {
+      existingRoles.push(masterRole);
+    }
+
+    const relatedChannels = guild.channels.cache
+      .filter((channel) => channel.permissionOverwrites?.cache?.has(campaignRole.id));
+
+    for (const channel of relatedChannels.values()) {
+      try {
+        await ensureMasterOverwrite(
+          channel,
+          masterRole.id,
+          `Campaign master permissions synced by ${interaction.user.tag}`
+        );
+        updatedChannels.push(`${channel.name} -> ${masterRole.name}`);
+      } catch (error) {
+        skippedChannels.push(`${channel.name} -> ${masterRole.name}`);
+      }
+    }
+  }
+
+  await auditLog(client, '🛠️ Синхронизация мастерских ролей кампаний', [
+    { name: 'Запустил', value: userField(interaction.user) },
+    {
+      name: 'Созданные роли',
+      value: createdRoles.length
+        ? createdRoles.map((role) => `<@&${role.id}>`).join('\n').slice(0, 1024)
+        : 'Новых ролей нет',
+    },
+    {
+      name: 'Обновлено каналов/категорий',
+      value: String(updatedChannels.length),
+      inline: true,
+    },
+    {
+      name: 'Ошибок обновления',
+      value: String(skippedChannels.length),
+      inline: true,
+    },
+  ]);
+
+  return interaction.editReply([
+    'Синхронизация кампаний завершена.',
+    '',
+    `Ролей кампаний найдено: **${campaignRoles.size}**`,
+    `Создано master-ролей: **${createdRoles.length}**`,
+    `Уже существовали: **${existingRoles.length}**`,
+    `Обновлено каналов/категорий: **${updatedChannels.length}**`,
+    skippedChannels.length ? `Не удалось обновить: **${skippedChannels.length}**` : null,
+    '',
+    createdRoles.length
+      ? `Созданные роли:\n${createdRoles.map((role) => `• ${role.name}`).join('\n').slice(0, 1500)}`
+      : 'Все нужные master-роли уже были созданы.',
+  ].filter(Boolean).join('\n'));
+}
+
 module.exports = {
   buildCampaignSummary,
   createCampaign,
   ensureMasterCampaignRoleName,
   applyCampaignRole,
+  syncCampaignMasterRoles,
 };
