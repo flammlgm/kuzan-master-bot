@@ -39,6 +39,8 @@ const config = {
   TAG_FREE_GAME_ID: process.env.TAG_FREE_GAME_ID,
   TAG_CLOSED_ID: process.env.TAG_CLOSED_ID,
   TAG_ARCHIVE_ID: process.env.TAG_ARCHIVE_ID,
+
+  YOUTUBE_NEWS_CHANNEL_ID: process.env.YOUTUBE_NEWS_CHANNEL_ID,
 };
 
 module.exports = { config };

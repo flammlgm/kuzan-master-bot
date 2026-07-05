@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const { startYoutubeWatcher } = require('./src/youtube/watcher');
 const { client } = require('./src/client');
 const { registerCommands } = require('./src/commands');
 const { handleInteraction, handleMessage } = require('./src/handlers');
@@ -10,6 +11,7 @@ const { Events } = require('discord.js');
 client.once(Events.ClientReady, async () => {
   console.log(`Бот запущен как ${client.user.tag}`);
   await registerCommands();
+  startYoutubeWatcher();
 });
 
 client.on(Events.InteractionCreate, handleInteraction);
