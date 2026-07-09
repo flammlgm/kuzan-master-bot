@@ -7,6 +7,7 @@ const channels = require('./channels');
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const STATE_PATH = path.join(process.cwd(), 'data', 'youtube-state.json');
+const SHORTS_PAGE_TIMEOUT_MS = 8000;
 
 function ensureDataDir() {
   fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
@@ -81,6 +82,76 @@ async function fetchLatestVideo(channelId) {
   return parseLatestVideo(xml);
 }
 
+function titleLooksLikeShorts(title) {
+  return /(^|\s)#?(shorts?|ytshorts)(\s|$|[.!?,:;#])/i.test(title);
+}
+
+async function fetchTextWithTimeout(url, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 YouTube watcher',
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return {
+      text: await response.text(),
+      url: response.url,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function getShortsCheck(video) {
+  if (titleLooksLikeShorts(video.title)) {
+    return { isShorts: true, reason: 'title' };
+  }
+
+  try {
+    const page = await fetchTextWithTimeout(
+      `https://www.youtube.com/watch?v=${video.videoId}`,
+      SHORTS_PAGE_TIMEOUT_MS,
+    );
+
+    if (!page) {
+      return { isShorts: false, reason: null };
+    }
+
+    const shortsUrl = `/shorts/${video.videoId}`;
+
+    if (
+      page.url.includes(shortsUrl) ||
+      page.text.includes(`"webPageType":"WEB_PAGE_TYPE_SHORTS"`) ||
+      page.text.includes(shortsUrl) ||
+      page.text.includes(`https://www.youtube.com/shorts/${video.videoId}`)
+    ) {
+      return { isShorts: true, reason: 'youtube-page' };
+    }
+  } catch (error) {
+    console.error(`YouTube shorts check failed for ${video.videoId}:`, error);
+  }
+
+  return { isShorts: false, reason: null };
+}
+
+function buildStateEntry(video, extra = {}) {
+  return {
+    lastVideoId: video.videoId,
+    lastTitle: video.title,
+    updatedAt: new Date().toISOString(),
+    ...extra,
+  };
+}
+
 async function announceVideo(video) {
   const discordChannel = await client.channels
     .fetch(config.YOUTUBE_NEWS_CHANNEL_ID)
@@ -88,7 +159,7 @@ async function announceVideo(video) {
 
   if (!discordChannel?.isTextBased()) {
     console.error('YouTube news channel not found or not text-based.');
-    return;
+    return false;
   }
 
   await discordChannel.send({
@@ -101,6 +172,8 @@ async function announceVideo(video) {
       video.url,
     ].join('\n'),
   });
+
+  return true;
 }
 
 async function checkYoutubeChannels({ announceOnFirstRun = false } = {}) {
@@ -117,12 +190,23 @@ async function checkYoutubeChannels({ announceOnFirstRun = false } = {}) {
 
       const currentState = state[item.channelId];
 
+      if (currentState?.lastVideoId === latestVideo.videoId) {
+        continue;
+      }
+
+      const shortsCheck = await getShortsCheck(latestVideo);
+
+      if (shortsCheck.isShorts) {
+        state[item.channelId] = buildStateEntry(latestVideo, {
+          lastSkippedReason: `shorts:${shortsCheck.reason}`,
+        });
+
+        changed = true;
+        continue;
+      }
+
       if (!currentState?.lastVideoId) {
-        state[item.channelId] = {
-          lastVideoId: latestVideo.videoId,
-          lastTitle: latestVideo.title,
-          updatedAt: new Date().toISOString(),
-        };
+        state[item.channelId] = buildStateEntry(latestVideo);
 
         changed = true;
 
@@ -133,17 +217,15 @@ async function checkYoutubeChannels({ announceOnFirstRun = false } = {}) {
         continue;
       }
 
-      if (currentState.lastVideoId !== latestVideo.videoId) {
-        await announceVideo(latestVideo);
+      const announced = await announceVideo(latestVideo);
 
-        state[item.channelId] = {
-          lastVideoId: latestVideo.videoId,
-          lastTitle: latestVideo.title,
-          updatedAt: new Date().toISOString(),
-        };
-
-        changed = true;
+      if (!announced) {
+        continue;
       }
+
+      state[item.channelId] = buildStateEntry(latestVideo);
+
+      changed = true;
     } catch (error) {
       console.error(`YouTube watcher error for ${item.channelId}:`, error);
     }
