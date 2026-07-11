@@ -1,4 +1,4 @@
-const { ChannelType, EmbedBuilder, MessageFlags } = require('discord.js');
+const { AttachmentBuilder, ChannelType, EmbedBuilder, MessageFlags } = require('discord.js');
 
 const { config } = require('./config');
 const { sessions } = require('./sessions');
@@ -6,6 +6,8 @@ const { sessions } = require('./sessions');
 const {
   createPanel,
   createPlayerPanel,
+  createCelestialPanel,
+  createCelestialResultButtons,
   createRoleSelectMenu,
   createCampaignRoleSelectMenu,
   createCampaignUserSelectMenu,
@@ -45,6 +47,48 @@ const { publishEventFromInteraction, publishEventFromMessage } = require('./even
 const { buildCampaignSummary, createCampaign, applyCampaignRole, syncCampaignMasterRoles } = require('./campaigns');
 const { showMyRoles, showServerHelp } = require('./playerPanel');
 const { acknowledgeRules, isRulesAcknowledgeButton } = require('./onboarding');
+const { generateImage } = require('./imageGeneration');
+
+const CELESTIAL_TICKET_LIFETIME_MS = 60 * 60 * 1000;
+
+function scheduleCelestialTicketDeletion(userId, channelId) {
+  setTimeout(async () => {
+    const session = sessions.get(userId);
+    if (session?.mode === 'celestial_image' && session.ticketChannelId === channelId) {
+      sessions.delete(userId);
+    }
+
+    await deleteTicketLater(channelId, 0);
+  }, CELESTIAL_TICKET_LIFETIME_MS);
+}
+
+async function startCelestialImageFlow(interaction) {
+  const ticket = await createTicket(interaction);
+  const session = sessions.get(interaction.user.id);
+  const isNewCelestialTicket = session.mode !== 'celestial_image';
+
+  session.mode = 'celestial_image';
+  session.generatingImage = false;
+  sessions.set(interaction.user.id, session);
+
+  if (isNewCelestialTicket) {
+    scheduleCelestialTicketDeletion(interaction.user.id, ticket.id);
+    await ticket.send({
+      content: `<@${interaction.user.id}>`,
+      embeds: [createTicketIntroEmbed('🎨 Celestial Image Lab', [
+        'Отправь в этот тикет **одно сообщение**:',
+        '• текст сообщения — промпт;',
+        '• до 4 изображений-референсов — по желанию.',
+        '',
+        'Пример: `Сохрани внешность персонажа из image 0, но изобрази его в ледяных доспехах`.',
+        '',
+        'Тикет закроется через 1 час или по кнопке после генерации.',
+      ].join('\n'))],
+    });
+  }
+
+  return interaction.reply({ content: `Тестовый тикет открыт: <#${ticket.id}>`, flags: MessageFlags.Ephemeral });
+}
 
 const {
   submitMasterApplication,
@@ -303,6 +347,18 @@ async function handleInteraction(interaction) {
         return interaction.reply(createPlayerPanel());
       }
 
+      if (interaction.commandName === 'celestialpanel') {
+        if (!config.CELESTIAL_PANEL_ID) {
+          return interaction.reply({ content: 'В .env не задан CELESTIAL_PANEL_ID.', flags: MessageFlags.Ephemeral });
+        }
+
+        if (interaction.channelId !== config.CELESTIAL_PANEL_ID) {
+          return interaction.reply({ content: `Эту панель можно создать только в <#${config.CELESTIAL_PANEL_ID}>.`, flags: MessageFlags.Ephemeral });
+        }
+
+        return interaction.reply(createCelestialPanel());
+      }
+
       if (interaction.commandName === 'synccampaignmasters') {
         return syncCampaignMasterRoles(interaction);
       }
@@ -313,6 +369,19 @@ async function handleInteraction(interaction) {
     }
 
     if (interaction.isButton()) {
+      if (interaction.customId === 'celestial_generate_image') return startCelestialImageFlow(interaction);
+
+      if (interaction.customId === 'celestial_image_saved') {
+        const session = sessions.get(interaction.user.id);
+        if (session?.mode !== 'celestial_image' || session.ticketChannelId !== interaction.channelId) {
+          return interaction.reply({ content: 'Это не ваш тестовый тикет.', flags: MessageFlags.Ephemeral });
+        }
+
+        sessions.delete(interaction.user.id);
+        await interaction.reply('Отлично, тикет закроется через несколько секунд.');
+        return deleteTicketLater(interaction.channelId, 3000);
+      }
+
       if (interaction.customId === 'player_find_game') return showActiveRecruitments(interaction);
       if (interaction.customId === 'player_apply_master') return interaction.showModal(createMasterApplicationModal());
       if (interaction.customId === 'player_my_roles') return showMyRoles(interaction);
@@ -923,6 +992,47 @@ async function handleMessage(message) {
 
     if (!session) return;
     if (message.channel.id !== session.ticketChannelId) return;
+
+    if (session.mode === 'celestial_image') {
+      if (session.generatingImage) return message.reply('Генерация уже идёт. Дождитесь результа.');
+
+      const prompt = message.content.trim();
+      if (prompt.length < 3) return message.reply('Добавьте к сообщению текстовый промпт.');
+
+      const attachments = [...message.attachments.values()];
+      if (attachments.length > 4) return message.reply('Можно прикрепить не более 4 референсов.');
+      if (attachments.some((item) => !item.contentType?.startsWith('image/'))) {
+        return message.reply('В референсах можно прикреплять только изображения.');
+      }
+
+      session.generatingImage = true;
+      sessions.set(message.author.id, session);
+      await message.reply('⏳ Генерирую в FLUX.2 Dev. Это может занять несколько минут…');
+
+      try {
+        const references = await Promise.all(attachments.map(async (attachment) => {
+          const response = await fetch(attachment.url);
+          if (!response.ok) throw new Error(`Discord CDN ${response.status}`);
+          return Buffer.from(await response.arrayBuffer());
+        }));
+
+        const image = await generateImage(prompt, references);
+        const result = new AttachmentBuilder(image, { name: 'celestial-flux2.jpg' });
+        session.generatingImage = false;
+        sessions.set(message.author.id, session);
+
+        return message.channel.send({
+          content: `🎨 **Готово. Промпт:**\n${prompt}`,
+          files: [result],
+          components: [createCelestialResultButtons()],
+        });
+      } catch (error) {
+        session.generatingImage = false;
+        sessions.set(message.author.id, session);
+        console.error('Ошибка FLUX.2 Dev:', error);
+        return message.reply('Не удалось создать изображение. Проверьте логи бота и квоту Cloudflare.');
+      }
+    }
 
     const attachment = message.attachments.first();
     if (!attachment) return;

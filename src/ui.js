@@ -69,6 +69,40 @@ function createPlayerPanel() {
   };
 }
 
+function createCelestialPanel() {
+  const embed = new EmbedBuilder()
+    .setTitle('✨ Celestial Lab')
+    .setDescription([
+      'Здесь живут тестовые функции бота.',
+      '',
+      '🎨 **Создать изображение** — бот откроет приватный тикет, где можно ввести промпт и загрузить до 4 референсов.',
+    ].join('\n'))
+    .setColor(0x7c3aed);
+
+  return {
+    embeds: [embed],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('celestial_generate_image')
+          .setLabel('Создать изображение')
+          .setEmoji('🎨')
+          .setStyle(ButtonStyle.Primary)
+      ),
+    ],
+  };
+}
+
+function createCelestialResultButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('celestial_image_saved')
+      .setLabel('Сохранил изображение')
+      .setEmoji('✅')
+      .setStyle(ButtonStyle.Success)
+  );
+}
+
 function createRoleSelectMenu(guild) {
   const roles = guild.roles.cache
     .filter((role) => !role.managed && role.name !== '@everyone')
@@ -596,6 +630,8 @@ function createRecruitmentManageButtons() {
 module.exports = {
   createPanel,
   createPlayerPanel,
+  createCelestialPanel,
+  createCelestialResultButtons,
   createRoleSelectMenu,
   createCampaignRoleSelectMenu,
   createCampaignUserSelectMenu,

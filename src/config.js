@@ -41,6 +41,9 @@ const config = {
   TAG_ARCHIVE_ID: process.env.TAG_ARCHIVE_ID,
 
   YOUTUBE_NEWS_CHANNEL_ID: process.env.YOUTUBE_NEWS_CHANNEL_ID,
+  CELESTIAL_PANEL_ID: process.env.CELESTIAL_PANEL_ID,
+  CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID,
+  CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
 };
 
 module.exports = { config };

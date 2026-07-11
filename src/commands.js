@@ -13,6 +13,11 @@ const commands = [
     .toJSON(),
 
   new SlashCommandBuilder()
+    .setName('celestialpanel')
+    .setDescription('Создать панель тестовых функций')
+    .toJSON(),
+
+  new SlashCommandBuilder()
     .setName('synccampaignmasters')
     .setDescription('Создать недостающие master_ роли для существующих camp_ кампаний')
     .toJSON(),
