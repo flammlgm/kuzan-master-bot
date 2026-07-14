@@ -19,4 +19,8 @@ module.exports = [
     name: "GM Marty",
     channelId: "UCVABVTJdfR9JpVdDqyslEOQ",
   },
+  {
+    name: "Living Room Studio",
+    channelId: "UCIuDCAAHMQ1UhxMKH_U-N2A",
+  },
 ];
