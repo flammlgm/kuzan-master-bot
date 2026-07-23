@@ -52,6 +52,19 @@ function getTimeZoneOffsetMinutes(date, timeZone) {
   return Math.round((timeInZoneAsUtc - date.getTime()) / 60000);
 }
 
+function getTimeZoneOffsetLabel(date, timeZone) {
+  const fixedOffsetMinutes = parseTimeZoneOffset(timeZone);
+  const offsetMinutes = fixedOffsetMinutes === null
+    ? getTimeZoneOffsetMinutes(date, timeZone)
+    : fixedOffsetMinutes;
+  const sign = offsetMinutes < 0 ? '-' : '+';
+  const absoluteMinutes = Math.abs(offsetMinutes);
+  const hours = String(Math.floor(absoluteMinutes / 60)).padStart(2, '0');
+  const minutes = String(absoluteMinutes % 60).padStart(2, '0');
+
+  return `UTC${sign}${hours}:${minutes}`;
+}
+
 function createUtcDateForTimeZone({ dayOffset, hour, timeZone, now = new Date() }) {
   const fixedOffsetMinutes = parseTimeZoneOffset(timeZone);
   let localToday;
@@ -90,4 +103,7 @@ function createUtcDateForTimeZone({ dayOffset, hour, timeZone, now = new Date() 
   return result;
 }
 
-module.exports = { createUtcDateForTimeZone };
+module.exports = {
+  createUtcDateForTimeZone,
+  getTimeZoneOffsetLabel,
+};

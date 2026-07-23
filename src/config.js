@@ -28,7 +28,7 @@ const config = {
 
   OWNER_USER_ID: process.env.OWNER_USER_ID,
   AUDIT_CHANNEL_ID: process.env.AUDIT_CHANNEL_ID,
-  EVENT_TIMEZONE: process.env.EVENT_TIMEZONE || '+03:00',
+  EVENT_TIMEZONE: process.env.EVENT_TIMEZONE || 'Europe/Berlin',
   CAMPAIGN_ROLE_PREFIX: process.env.CAMPAIGN_ROLE_PREFIX || 'camp_',
   MASTER_CAMPAIGN_ROLE_PREFIX: process.env.MASTER_CAMPAIGN_ROLE_PREFIX || 'master_',
 

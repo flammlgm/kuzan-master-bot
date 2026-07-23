@@ -359,15 +359,6 @@ function createEventDetailsModal() {
     ),
     new ActionRowBuilder().addComponents(
       new TextInputBuilder().setCustomId('event_description').setLabel('Описание').setStyle(TextInputStyle.Paragraph).setRequired(false).setPlaceholder('Краткое описание игры.')
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder()
-        .setCustomId('event_timezone')
-        .setLabel('Твой часовой пояс')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true)
-        .setValue(config.EVENT_TIMEZONE)
-        .setPlaceholder('+03:00 или Europe/Moscow')
     )
   );
 
@@ -382,6 +373,46 @@ function createSkipCoverButton() {
       .setEmoji('➡️')
       .setStyle(ButtonStyle.Secondary)
   );
+}
+
+function createEventCalibrationButtons() {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('event_time_shift_-1440')
+        .setLabel('−1 день')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('event_time_shift_-60')
+        .setLabel('−1 час')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('event_time_shift_-15')
+        .setLabel('−15 минут')
+        .setStyle(ButtonStyle.Secondary)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('event_time_shift_15')
+        .setLabel('+15 минут')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('event_time_shift_60')
+        .setLabel('+1 час')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('event_time_shift_1440')
+        .setLabel('+1 день')
+        .setStyle(ButtonStyle.Secondary)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('event_time_confirm')
+        .setLabel('Опубликовать событие')
+        .setEmoji('✅')
+        .setStyle(ButtonStyle.Success)
+    ),
+  ];
 }
 
 function createCampaignNameModal() {
@@ -657,6 +688,7 @@ module.exports = {
   createPollExtraTextModal,
   createEventDetailsModal,
   createSkipCoverButton,
+  createEventCalibrationButtons,
   createCampaignNameModal,
   createAddTextChannelModal,
   createAddVoiceChannelModal,

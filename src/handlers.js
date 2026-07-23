@@ -24,6 +24,7 @@ const {
   createPollExtraTextModal,
   createEventDetailsModal,
   createSkipCoverButton,
+  createEventCalibrationButtons,
   createCampaignNameModal,
   createAddTextChannelModal,
   createAddVoiceChannelModal,
@@ -43,14 +44,36 @@ const {
 } = require('./tickets');
 
 const { publishPoll } = require('./polls');
-const { publishEventFromInteraction, publishEventFromMessage } = require('./events');
+const { publishEventFromInteraction } = require('./events');
 const { buildCampaignSummary, createCampaign, applyCampaignRole, syncCampaignMasterRoles } = require('./campaigns');
 const { showMyRoles, showServerHelp } = require('./playerPanel');
 const { acknowledgeRules, isRulesAcknowledgeButton } = require('./onboarding');
 const { generateImage } = require('./imageGeneration');
-const { createUtcDateForTimeZone } = require('./utils/timeZone');
+const { createUtcDateForTimeZone, getTimeZoneOffsetLabel } = require('./utils/timeZone');
+const { shiftEventSchedule, getDiscordTimestamp } = require('./utils/eventCalibration');
 
 const CELESTIAL_TICKET_LIFETIME_MS = 60 * 60 * 1000;
+const EVENT_TIME_SHIFTS = new Set([-1440, -60, -15, 15, 60, 1440]);
+
+function createEventCalibrationPayload(session) {
+  const referenceTimeZone = session.event.referenceTimeZone || config.EVENT_TIMEZONE;
+  const startDate = new Date(session.event.startDate);
+  const referenceOffset = getTimeZoneOffsetLabel(startDate, referenceTimeZone);
+  const timestamp = getDiscordTimestamp(startDate);
+
+  return {
+    content: [
+      '**Последний шаг — проверь время события.**',
+      `Исходное время рассчитано по часовому поясу сервера (${referenceOffset}).`,
+      'Discord показывает выбранный момент по часовому поясу твоего устройства:',
+      '',
+      `## <t:${timestamp}:F>`,
+      '',
+      'Если дата и время верные — публикуй. Иначе подвинь их кнопками.',
+    ].join('\n'),
+    components: createEventCalibrationButtons(),
+  };
+}
 
 function scheduleCelestialTicketDeletion(userId, channelId) {
   setTimeout(async () => {
@@ -523,10 +546,64 @@ async function handleInteraction(interaction) {
         return submitRecruitmentForModeration(interaction, session, null);
       }
 
+      if (interaction.customId.startsWith('event_time_shift_')) {
+        const session = sessions.get(interaction.user.id);
+        const deltaMinutes = Number(interaction.customId.replace('event_time_shift_', ''));
+
+        if (!session?.event || session.ticketChannelId !== interaction.channelId) {
+          return interaction.reply({ content: 'Сессия события потерялась.', flags: MessageFlags.Ephemeral });
+        }
+
+        if (!EVENT_TIME_SHIFTS.has(deltaMinutes)) {
+          return interaction.reply({ content: 'Некорректный шаг изменения времени.', flags: MessageFlags.Ephemeral });
+        }
+
+        session.event = shiftEventSchedule(session.event, deltaMinutes);
+        sessions.set(interaction.user.id, session);
+
+        return interaction.update(createEventCalibrationPayload(session));
+      }
+
+      if (interaction.customId === 'event_time_confirm') {
+        const session = sessions.get(interaction.user.id);
+
+        if (!session?.event || session.ticketChannelId !== interaction.channelId) {
+          return interaction.reply({ content: 'Сессия события потерялась.', flags: MessageFlags.Ephemeral });
+        }
+
+        if (session.eventPublishing) {
+          return interaction.reply({ content: 'Событие уже публикуется.', flags: MessageFlags.Ephemeral });
+        }
+
+        session.eventPublishing = true;
+        sessions.set(interaction.user.id, session);
+
+        try {
+          return await publishEventFromInteraction(
+            interaction,
+            session,
+            session.eventImageBuffer || null
+          );
+        } catch (error) {
+          session.eventPublishing = false;
+          sessions.set(interaction.user.id, session);
+          throw error;
+        }
+      }
+
       if (interaction.customId === 'skip_event_cover') {
         const session = sessions.get(interaction.user.id);
         if (!session?.event) return interaction.reply({ content: 'Сессия события потерялась.', flags: MessageFlags.Ephemeral });
-        return publishEventFromInteraction(interaction, session, null);
+
+        if (!session.awaitingEventCover) {
+          return interaction.reply({ content: 'Обложка уже выбрана. Используй панель проверки времени ниже.', flags: MessageFlags.Ephemeral });
+        }
+
+        session.awaitingEventCover = false;
+        session.eventImageBuffer = null;
+        sessions.set(interaction.user.id, session);
+
+        return interaction.update(createEventCalibrationPayload(session));
       }
 
       if (interaction.customId.startsWith('master_application_approve_')) {
@@ -948,30 +1025,11 @@ async function handleInteraction(interaction) {
           return interaction.reply({ content: 'Не хватает данных для события или неверно указана длительность.', flags: MessageFlags.Ephemeral });
         }
 
-        const timeZone = interaction.fields.getTextInputValue('event_timezone').trim();
-
-        if (!timeZone) {
-          return interaction.reply({ content: 'Нужно указать часовой пояс для события.', flags: MessageFlags.Ephemeral });
-        }
-
-        let startDate;
-
-        try {
-          startDate = createUtcDateForTimeZone({
-            dayOffset: session.selectedDayOffset,
-            hour: session.selectedHour,
-            timeZone,
-          });
-        } catch (error) {
-          if (error instanceof RangeError) {
-            return interaction.reply({
-              content: 'Не удалось распознать часовой пояс. Укажи его как `+03:00` или `Europe/Moscow`.',
-              flags: MessageFlags.Ephemeral,
-            });
-          }
-
-          throw error;
-        }
+        const startDate = createUtcDateForTimeZone({
+          dayOffset: session.selectedDayOffset,
+          hour: session.selectedHour,
+          timeZone: config.EVENT_TIMEZONE,
+        });
 
         const endDate = new Date(startDate.getTime() + durationHours * 60 * 60 * 1000);
 
@@ -981,8 +1039,10 @@ async function handleInteraction(interaction) {
           startDate: startDate.toISOString(),
           endDate: endDate.toISOString(),
           channelId: session.eventChannelId,
-          timeZone,
+          referenceTimeZone: config.EVENT_TIMEZONE,
         };
+        session.awaitingEventCover = true;
+        session.eventImageBuffer = null;
 
         sessions.set(interaction.user.id, session);
 
@@ -1070,8 +1130,12 @@ async function handleMessage(message) {
     const arrayBuffer = await response.arrayBuffer();
     const imageBuffer = Buffer.from(arrayBuffer);
 
-    if (session?.event) {
-      return publishEventFromMessage(message, session, imageBuffer);
+    if (session?.event && session.awaitingEventCover) {
+      session.awaitingEventCover = false;
+      session.eventImageBuffer = imageBuffer;
+      sessions.set(message.author.id, session);
+
+      return message.reply(createEventCalibrationPayload(session));
     }
 
     if (session?.recruitment && session.awaitingRecruitmentCover) {
