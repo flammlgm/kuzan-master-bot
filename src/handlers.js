@@ -48,6 +48,7 @@ const { buildCampaignSummary, createCampaign, applyCampaignRole, syncCampaignMas
 const { showMyRoles, showServerHelp } = require('./playerPanel');
 const { acknowledgeRules, isRulesAcknowledgeButton } = require('./onboarding');
 const { generateImage } = require('./imageGeneration');
+const { createUtcDateForTimeZone } = require('./utils/timeZone');
 
 const CELESTIAL_TICKET_LIFETIME_MS = 60 * 60 * 1000;
 
@@ -947,9 +948,30 @@ async function handleInteraction(interaction) {
           return interaction.reply({ content: 'Не хватает данных для события или неверно указана длительность.', flags: MessageFlags.Ephemeral });
         }
 
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() + session.selectedDayOffset);
-        startDate.setHours(session.selectedHour, 0, 0, 0);
+        const timeZone = interaction.fields.getTextInputValue('event_timezone').trim();
+
+        if (!timeZone) {
+          return interaction.reply({ content: 'Нужно указать часовой пояс для события.', flags: MessageFlags.Ephemeral });
+        }
+
+        let startDate;
+
+        try {
+          startDate = createUtcDateForTimeZone({
+            dayOffset: session.selectedDayOffset,
+            hour: session.selectedHour,
+            timeZone,
+          });
+        } catch (error) {
+          if (error instanceof RangeError) {
+            return interaction.reply({
+              content: 'Не удалось распознать часовой пояс. Укажи его как `+03:00` или `Europe/Moscow`.',
+              flags: MessageFlags.Ephemeral,
+            });
+          }
+
+          throw error;
+        }
 
         const endDate = new Date(startDate.getTime() + durationHours * 60 * 60 * 1000);
 
@@ -959,6 +981,7 @@ async function handleInteraction(interaction) {
           startDate: startDate.toISOString(),
           endDate: endDate.toISOString(),
           channelId: session.eventChannelId,
+          timeZone,
         };
 
         sessions.set(interaction.user.id, session);

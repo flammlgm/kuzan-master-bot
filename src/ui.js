@@ -359,6 +359,15 @@ function createEventDetailsModal() {
     ),
     new ActionRowBuilder().addComponents(
       new TextInputBuilder().setCustomId('event_description').setLabel('Описание').setStyle(TextInputStyle.Paragraph).setRequired(false).setPlaceholder('Краткое описание игры.')
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('event_timezone')
+        .setLabel('Твой часовой пояс')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setValue(config.EVENT_TIMEZONE)
+        .setPlaceholder('+03:00 или Europe/Moscow')
     )
   );
 
