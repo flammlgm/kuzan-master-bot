@@ -6,6 +6,7 @@ const { sessions } = require('./sessions');
 const {
   createPanel,
   createPlayerPanel,
+  createPlayerMasterRequestModal,
   createCelestialPanel,
   createCelestialResultButtons,
   createRoleSelectMenu,
@@ -47,6 +48,12 @@ const { publishPoll } = require('./polls');
 const { publishEventFromInteraction } = require('./events');
 const { buildCampaignSummary, createCampaign, applyCampaignRole, syncCampaignMasterRoles } = require('./campaigns');
 const { showMyRoles, showServerHelp } = require('./playerPanel');
+const {
+  submitPlayerMasterRequest,
+  claimPlayerMasterRequest,
+  returnPlayerMasterRequest,
+  hasActivePlayerMasterRequest,
+} = require('./masterSearch');
 const { acknowledgeRules, isRulesAcknowledgeButton } = require('./onboarding');
 const { generateImage } = require('./imageGeneration');
 const { createUtcDateForTimeZone, getTimeZoneOffsetLabel } = require('./utils/timeZone');
@@ -407,6 +414,16 @@ async function handleInteraction(interaction) {
       }
 
       if (interaction.customId === 'player_find_game') return showActiveRecruitments(interaction);
+      if (interaction.customId === 'player_find_master') {
+        if (hasActivePlayerMasterRequest(interaction.user.id)) {
+          return interaction.reply({
+            content: 'У тебя уже есть действующее объявление о поиске мастера.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        return interaction.showModal(createPlayerMasterRequestModal());
+      }
       if (interaction.customId === 'player_apply_master') return interaction.showModal(createMasterApplicationModal());
       if (interaction.customId === 'player_my_roles') return showMyRoles(interaction);
       if (interaction.customId === 'player_help') return showServerHelp(interaction);
@@ -627,6 +644,20 @@ async function handleInteraction(interaction) {
       if (interaction.customId.startsWith('feedback_ack_')) {
         return acknowledgeFeedback(interaction, interaction.customId.replace('feedback_ack_', ''));
       }
+
+      if (interaction.customId.startsWith('master_search_claim_')) {
+        return claimPlayerMasterRequest(
+          interaction,
+          interaction.customId.replace('master_search_claim_', '')
+        );
+      }
+
+      if (interaction.customId.startsWith('master_search_return_')) {
+        return returnPlayerMasterRequest(
+          interaction,
+          interaction.customId.replace('master_search_return_', '')
+        );
+      }
     }
 
     if (interaction.isUserSelectMenu()) {
@@ -820,6 +851,10 @@ async function handleInteraction(interaction) {
     }
 
     if (interaction.isModalSubmit()) {
+      if (interaction.customId === 'player_master_request_modal') {
+        return submitPlayerMasterRequest(interaction);
+      }
+
       if (interaction.customId === 'master_application_modal') return submitMasterApplication(interaction);
 
       if (interaction.customId.startsWith('master_application_reject_modal_')) {

@@ -44,9 +44,10 @@ function createPlayerPanel() {
     .setTitle('Панель игрока')
     .setDescription(
       [
-        'Здесь можно найти игру, подать заявку на мастера и посмотреть свои роли.',
+        'Здесь можно найти игру, найти мастера, подать заявку на мастера и посмотреть свои роли.',
         '',
         '🎲 **Найти игру** — показывает активные наборы игроков.',
+        '🔎 **Найти мастера** — отправляет анкету группы в закрытый канал мастеров.',
         '🧙 **Хочу стать мастером** — отправляет заявку владельцу сервера.',
         '📌 **Мои роли и кампании** — показывает твои роли и кампании.',
         '❓ **Помощь** — краткая навигация по серверу.',
@@ -59,6 +60,7 @@ function createPlayerPanel() {
     components: [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('player_find_game').setLabel('Найти игру').setEmoji('🎲').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('player_find_master').setLabel('Найти мастера').setEmoji('🔎').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('player_apply_master').setLabel('Хочу стать мастером').setEmoji('🧙').setStyle(ButtonStyle.Secondary)
       ),
       new ActionRowBuilder().addComponents(
@@ -67,6 +69,62 @@ function createPlayerPanel() {
       ),
     ],
   };
+}
+
+function createPlayerMasterRequestModal() {
+  const modal = new ModalBuilder()
+    .setCustomId('player_master_request_modal')
+    .setTitle('Поиск мастера');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('master_search_group')
+        .setLabel('Состав и возраст игроков')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(500)
+        .setPlaceholder('Например: 4 игрока, 20–27 лет, двое новичков')
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('master_search_setting')
+        .setLabel('Система и сеттинг')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(700)
+        .setPlaceholder('D&D 5e, тёмное фэнтези / система не важна')
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('master_search_wishes')
+        .setLabel('Тематика и чего хотите от игры')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(1000)
+        .setPlaceholder('Желаемый сюжет, атмосфера, ограничения и пожелания')
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('master_search_schedule')
+        .setLabel('Формат и расписание')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(700)
+        .setPlaceholder('Онлайн, по субботам после 18:00 МСК, кампания')
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('master_search_payment')
+        .setLabel('Оплата')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(100)
+        .setPlaceholder('Бесплатно / платно / всё равно')
+    )
+  );
+
+  return modal;
 }
 
 function createCelestialPanel() {
@@ -670,6 +728,7 @@ function createRecruitmentManageButtons() {
 module.exports = {
   createPanel,
   createPlayerPanel,
+  createPlayerMasterRequestModal,
   createCelestialPanel,
   createCelestialResultButtons,
   createRoleSelectMenu,
