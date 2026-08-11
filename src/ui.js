@@ -48,6 +48,7 @@ function createPlayerPanel() {
         '',
         '🎲 **Найти игру** — показывает активные наборы игроков.',
         '🔎 **Найти мастера** — отправляет анкету группы в закрытый канал мастеров.',
+        '📋 **Моё объявление** — показывает статус и позволяет закрыть поиск.',
         '💬 Желательно открыть личные сообщения от участников сервера, чтобы бот смог сообщить об отклике.',
         '🧙 **Хочу стать мастером** — отправляет заявку владельцу сервера.',
         '📌 **Мои роли и кампании** — показывает твои роли и кампании.',
@@ -65,6 +66,7 @@ function createPlayerPanel() {
         new ButtonBuilder().setCustomId('player_apply_master').setLabel('Хочу стать мастером').setEmoji('🧙').setStyle(ButtonStyle.Secondary)
       ),
       new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('player_master_request_manage').setLabel('Моё объявление').setEmoji('📋').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('player_my_roles').setLabel('Мои роли и кампании').setEmoji('📌').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('player_help').setLabel('Помощь').setEmoji('❓').setStyle(ButtonStyle.Secondary)
       ),

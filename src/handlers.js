@@ -53,6 +53,8 @@ const {
   claimPlayerMasterRequest,
   returnPlayerMasterRequest,
   hasActivePlayerMasterRequest,
+  showPlayerMasterRequest,
+  closePlayerMasterRequest,
 } = require('./masterSearch');
 const { acknowledgeRules, isRulesAcknowledgeButton } = require('./onboarding');
 const { generateImage } = require('./imageGeneration');
@@ -424,6 +426,9 @@ async function handleInteraction(interaction) {
 
         return interaction.showModal(createPlayerMasterRequestModal());
       }
+      if (interaction.customId === 'player_master_request_manage') {
+        return showPlayerMasterRequest(interaction);
+      }
       if (interaction.customId === 'player_apply_master') return interaction.showModal(createMasterApplicationModal());
       if (interaction.customId === 'player_my_roles') return showMyRoles(interaction);
       if (interaction.customId === 'player_help') return showServerHelp(interaction);
@@ -656,6 +661,13 @@ async function handleInteraction(interaction) {
         return returnPlayerMasterRequest(
           interaction,
           interaction.customId.replace('master_search_return_', '')
+        );
+      }
+
+      if (interaction.customId.startsWith('player_master_search_close_')) {
+        return closePlayerMasterRequest(
+          interaction,
+          interaction.customId.replace('player_master_search_close_', '')
         );
       }
     }

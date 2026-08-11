@@ -29,6 +29,7 @@ function loadState() {
 
 const state = loadState();
 if (!state.requests || typeof state.requests !== 'object') state.requests = {};
+const operationLocks = new Set();
 
 function saveState() {
   fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
@@ -43,6 +44,12 @@ function hasActivePlayerMasterRequest(playerId) {
   return Object.values(state.requests).some(
     (request) => request.playerId === playerId && ['open', 'claimed', 'returning'].includes(request.status)
   );
+}
+
+function getActivePlayerMasterRequest(playerId) {
+  return Object.values(state.requests)
+    .filter((request) => request.playerId === playerId && ['open', 'claimed', 'returning'].includes(request.status))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null;
 }
 
 function createRequestEmbed(request, status = request.status) {
@@ -68,8 +75,11 @@ function createRequestEmbed(request, status = request.status) {
   } else if (status === 'claimed') {
     embed.addFields({ name: 'Мастер найден', value: `<@${request.masterId}>` });
     embed.setFooter({ text: 'Вернуть объявление в поиск может только закреплённый мастер.' });
-  } else {
+  } else if (status === 'returned') {
     embed.addFields({ name: 'Статус', value: 'Объявление возвращено в поиск новой публикацией.' });
+  } else if (status === 'closed') {
+    embed.addFields({ name: 'Статус', value: 'Поиск мастера закрыт игроком.' });
+    embed.setFooter({ text: 'Это объявление больше не актуально.' });
   }
 
   return embed;
@@ -93,6 +103,23 @@ function createReturnButton(requestId) {
       .setEmoji('↩️')
       .setStyle(ButtonStyle.Secondary)
   );
+}
+
+function createPlayerManageButtons(requestId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`player_master_search_close_${requestId}`)
+      .setLabel('Закрыть поиск')
+      .setEmoji('🔒')
+      .setStyle(ButtonStyle.Danger)
+  );
+}
+
+function getStatusLabel(request) {
+  if (request.status === 'open') return 'Мастера пока не нашли';
+  if (request.status === 'claimed') return `Группу забрал <@${request.masterId}>`;
+  if (request.status === 'returning') return 'Объявление возвращается в поиск';
+  return 'Поиск закрыт';
 }
 
 async function getRequestsChannel(guild) {
@@ -158,12 +185,40 @@ async function submitPlayerMasterRequest(interaction) {
   ].join('\n'));
 }
 
+async function showPlayerMasterRequest(interaction) {
+  const request = getActivePlayerMasterRequest(interaction.user.id);
+
+  if (!request) {
+    return interaction.reply({
+      content: 'У тебя нет действующего объявления о поиске мастера.',
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  return interaction.reply({
+    content: [
+      '📋 **Твоё объявление о поиске мастера**',
+      `Статус: ${getStatusLabel(request)}`,
+      '',
+      request.status === 'returning'
+        ? 'Подожди несколько секунд, пока бот опубликует объявление заново.'
+        : 'Если поиск больше не актуален, закрой объявление.',
+    ].join('\n'),
+    components: request.status === 'returning' ? [] : [createPlayerManageButtons(request.id)],
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
 async function claimPlayerMasterRequest(interaction, requestId) {
   if (!interaction.member.roles.cache.has(config.DUNGEON_MASTER_ROLE_ID)) {
     return interaction.reply({ content: 'Забрать группу может только мастер.', flags: MessageFlags.Ephemeral });
   }
 
   const request = state.requests[requestId];
+
+  if (operationLocks.has(requestId)) {
+    return interaction.reply({ content: 'Объявление сейчас обновляется. Попробуй ещё раз.', flags: MessageFlags.Ephemeral });
+  }
 
   if (!request || request.status !== 'open' || request.messageId !== interaction.message.id) {
     return interaction.reply({
@@ -181,12 +236,14 @@ async function claimPlayerMasterRequest(interaction, requestId) {
     });
   }
 
-  request.status = 'claimed';
-  request.masterId = interaction.user.id;
-  request.claimedAt = new Date().toISOString();
-  saveState();
+  operationLocks.add(requestId);
 
   try {
+    request.status = 'claimed';
+    request.masterId = interaction.user.id;
+    request.claimedAt = new Date().toISOString();
+    saveState();
+
     await interaction.update({
       content: `<@${request.playerId}> <@${request.masterId}>`,
       embeds: [createRequestEmbed(request)],
@@ -199,6 +256,8 @@ async function claimPlayerMasterRequest(interaction, requestId) {
     delete request.claimedAt;
     saveState();
     throw error;
+  } finally {
+    operationLocks.delete(requestId);
   }
 
   const player = await client.users.fetch(request.playerId).catch(() => null);
@@ -220,6 +279,10 @@ async function claimPlayerMasterRequest(interaction, requestId) {
 async function returnPlayerMasterRequest(interaction, requestId) {
   const request = state.requests[requestId];
 
+  if (operationLocks.has(requestId)) {
+    return interaction.reply({ content: 'Объявление сейчас обновляется. Попробуй ещё раз.', flags: MessageFlags.Ephemeral });
+  }
+
   if (!request || request.status !== 'claimed' || request.messageId !== interaction.message.id) {
     return interaction.reply({ content: 'Это объявление уже не закреплено за мастером.', flags: MessageFlags.Ephemeral });
   }
@@ -237,47 +300,52 @@ async function returnPlayerMasterRequest(interaction, requestId) {
   }
 
   const previousMasterId = request.masterId;
-  request.status = 'returning';
-  await interaction.deferUpdate();
-
-  const republishedRequest = {
-    ...request,
-    status: 'open',
-    masterId: null,
-    claimedAt: undefined,
-    republishedAt: new Date().toISOString(),
-  };
-
+  operationLocks.add(requestId);
   let message;
 
   try {
-    message = await channel.send({
-      content: `<@&${config.DUNGEON_MASTER_ROLE_ID}>`,
-      embeds: [createRequestEmbed(republishedRequest)],
-      components: [createClaimButton(requestId)],
-      allowedMentions: { roles: [config.DUNGEON_MASTER_ROLE_ID] },
-    });
-  } catch (error) {
-    request.status = 'claimed';
-    request.masterId = previousMasterId;
+    request.status = 'returning';
+    await interaction.deferUpdate();
+
+    const republishedRequest = {
+      ...request,
+      status: 'open',
+      masterId: null,
+      claimedAt: undefined,
+      republishedAt: new Date().toISOString(),
+    };
+
+    try {
+      message = await channel.send({
+        content: `<@&${config.DUNGEON_MASTER_ROLE_ID}>`,
+        embeds: [createRequestEmbed(republishedRequest)],
+        components: [createClaimButton(requestId)],
+        allowedMentions: { roles: [config.DUNGEON_MASTER_ROLE_ID] },
+      });
+    } catch (error) {
+      request.status = 'claimed';
+      request.masterId = previousMasterId;
+      saveState();
+
+      console.error('Не удалось вернуть объявление в поиск мастера:', error);
+
+      await interaction.followUp({
+        content: 'Не удалось опубликовать объявление заново. Оно осталось закреплено за тобой.',
+        flags: MessageFlags.Ephemeral,
+      }).catch(() => null);
+
+      return;
+    }
+
+    request.status = 'open';
+    request.masterId = null;
+    delete request.claimedAt;
+    request.republishedAt = republishedRequest.republishedAt;
+    request.messageId = message.id;
     saveState();
-
-    console.error('Не удалось вернуть объявление в поиск мастера:', error);
-
-    await interaction.followUp({
-      content: 'Не удалось опубликовать объявление заново. Оно осталось закреплено за тобой.',
-      flags: MessageFlags.Ephemeral,
-    }).catch(() => null);
-
-    return;
+  } finally {
+    operationLocks.delete(requestId);
   }
-
-  request.status = 'open';
-  request.masterId = null;
-  delete request.claimedAt;
-  request.republishedAt = republishedRequest.republishedAt;
-  request.messageId = message.id;
-  saveState();
 
   await interaction.message.edit({
     content: `<@${request.playerId}>`,
@@ -298,9 +366,71 @@ async function returnPlayerMasterRequest(interaction, requestId) {
   ]);
 }
 
+async function closePlayerMasterRequest(interaction, requestId) {
+  const request = state.requests[requestId];
+
+  if (!request || request.playerId !== interaction.user.id) {
+    return interaction.reply({ content: 'Это объявление тебе не принадлежит.', flags: MessageFlags.Ephemeral });
+  }
+
+  if (operationLocks.has(requestId) || request.status === 'returning') {
+    return interaction.reply({
+      content: 'Объявление сейчас обновляется. Подожди несколько секунд и попробуй снова.',
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  if (!['open', 'claimed'].includes(request.status)) {
+    return interaction.reply({ content: 'Это объявление уже закрыто.', flags: MessageFlags.Ephemeral });
+  }
+
+  operationLocks.add(requestId);
+
+  try {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const previousMasterId = request.masterId;
+    request.status = 'closed';
+    request.closedAt = new Date().toISOString();
+    saveState();
+
+    const channel = await client.channels.fetch(request.channelId).catch(() => null);
+    const message = channel?.isTextBased()
+      ? await channel.messages.fetch(request.messageId).catch(() => null)
+      : null;
+
+    if (message) {
+      await message.edit({
+        content: `<@${request.playerId}>`,
+        embeds: [createRequestEmbed({ ...request, masterId: previousMasterId }, 'closed')],
+        components: [],
+        allowedMentions: { parse: [] },
+      }).catch((error) => console.error('Не удалось закрыть сообщение поиска мастера:', error));
+    }
+
+    if (previousMasterId) {
+      const master = await client.users.fetch(previousMasterId).catch(() => null);
+      if (master) {
+        await master.send(`🔒 <@${request.playerId}> закрыл объявление о поиске мастера.`).catch(() => null);
+      }
+    }
+
+    await auditLog(client, '🔒 Игрок закрыл поиск мастера', [
+      { name: 'Игрок', value: userField(interaction.user) },
+      { name: 'Мастер', value: previousMasterId ? `<@${previousMasterId}>` : 'Не был найден' },
+    ]);
+
+    return interaction.editReply('✅ Поиск мастера закрыт. Теперь ты можешь создать новое объявление.');
+  } finally {
+    operationLocks.delete(requestId);
+  }
+}
+
 module.exports = {
   hasActivePlayerMasterRequest,
   submitPlayerMasterRequest,
   claimPlayerMasterRequest,
   returnPlayerMasterRequest,
+  showPlayerMasterRequest,
+  closePlayerMasterRequest,
 };
