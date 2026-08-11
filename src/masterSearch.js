@@ -55,7 +55,11 @@ function createRequestEmbed(request, status = request.status) {
       { name: 'Система и сеттинг', value: request.setting || '—' },
       { name: 'Тематика и пожелания', value: request.wishes || '—' },
       { name: 'Формат и расписание', value: request.schedule || '—' },
-      { name: 'Оплата', value: request.payment || '—', inline: true }
+      { name: 'Оплата', value: request.payment || '—', inline: true },
+      {
+        name: 'После отклика',
+        value: 'Если вы готовы взять группу, нажмите кнопку и обязательно свяжитесь с игроком лично.',
+      }
     )
     .setTimestamp(new Date(request.createdAt));
 
@@ -150,6 +154,7 @@ async function submitPlayerMasterRequest(interaction) {
   return interaction.editReply([
     '✅ Объявление отправлено в закрытый канал мастеров.',
     'Когда мастер заберёт группу, бот пришлёт тебе личное сообщение.',
+    '💬 Желательно открыть личные сообщения от участников сервера, иначе уведомление бота может не дойти.',
   ].join('\n'));
 }
 
