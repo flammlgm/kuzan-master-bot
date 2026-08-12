@@ -23,4 +23,8 @@ module.exports = [
     name: "Living Room Studio",
     channelId: "UCIuDCAAHMQ1UhxMKH_U-N2A",
   },
+  {
+    name: "Eugene Wheel",
+    channelId: "UCIJzf-OtYT0u3y4ViNdU9jA",
+  },
 ];
