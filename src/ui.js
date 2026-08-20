@@ -586,19 +586,19 @@ function createRecruitmentBasicModal() {
 
   modal.addComponents(
     new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('recruitment_title').setLabel('Название').setStyle(TextInputStyle.Short).setRequired(true)
+      new TextInputBuilder().setCustomId('recruitment_title').setLabel('Название').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)
     ),
     new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('recruitment_system').setLabel('Система').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('D&D 5e / авторская / Pathfinder / другое')
+      new TextInputBuilder().setCustomId('recruitment_system').setLabel('Система').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setPlaceholder('D&D 5e / авторская / Pathfinder / другое')
     ),
     new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('recruitment_players').setLabel('Количество игроков').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('4-5 игроков')
+      new TextInputBuilder().setCustomId('recruitment_players').setLabel('Количество игроков').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setPlaceholder('4-5 игроков')
     ),
     new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('recruitment_age').setLabel('Возрастное ограничение').setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder('16+ / 18+ / нет')
+      new TextInputBuilder().setCustomId('recruitment_age').setLabel('Возрастное ограничение').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(20).setPlaceholder('16+ / 18+ / нет')
     ),
     new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId('recruitment_dates').setLabel('Примерные даты / расписание').setStyle(TextInputStyle.Paragraph).setRequired(true)
+      new TextInputBuilder().setCustomId('recruitment_dates').setLabel('Примерные даты / расписание').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1024)
     )
   );
 
@@ -617,6 +617,7 @@ function createRecruitmentDetailsModal() {
         .setLabel('Требования к игрокам')
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(false)
+        .setMaxLength(1024)
         .setPlaceholder('Опыт, микрофон, пунктуальность, стиль игры.')
     ),
     new ActionRowBuilder().addComponents(
@@ -625,6 +626,7 @@ function createRecruitmentDetailsModal() {
         .setLabel('Описание игры')
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(true)
+        .setMaxLength(1024)
         .setPlaceholder('О чём игра, какой вайб, кого ждёшь.')
     )
   );
