@@ -27,4 +27,8 @@ module.exports = [
     name: "Eugene Wheel",
     channelId: "UCIJzf-OtYT0u3y4ViNdU9jA",
   },
+    {
+    name: "Негативный Куб",
+    channelId: "UCWNx484N4P6MU10srlARIig",
+  },
 ];
