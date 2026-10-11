@@ -11,7 +11,7 @@ test('анонс набора содержит ссылку и разрешае�
 
   assert.equal(
     payload.content,
-    `@everyone\n\n📢 Новое объявление о наборе игроков:\n${threadUrl}`
+    `@everyone\n\n📢 Новое объявление:\n${threadUrl}`
   );
   assert.deepEqual(payload.allowedMentions, { parse: ['everyone'] });
 });

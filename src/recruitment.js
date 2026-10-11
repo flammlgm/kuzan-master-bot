@@ -181,7 +181,7 @@ async function approveRecruitment(interaction, recruitmentId) {
   }
 
   const mainTextChannel = await interaction.guild.channels
-    .fetch(config.SYSTEM_TEXT_CHANNEL_ID)
+    .fetch(config.MAIN_TEXT_CHANNEL_ID)
     .catch(() => null);
 
   if (!mainTextChannel?.isTextBased()) {

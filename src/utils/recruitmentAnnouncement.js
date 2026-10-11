@@ -3,7 +3,7 @@ function createRecruitmentAnnouncementPayload(threadUrl) {
     content: [
       '@everyone',
       '',
-      '📢 Новое объявление о наборе игроков:',
+      '📢 Новое объявление:',
       threadUrl,
     ].join('\n'),
     allowedMentions: {
