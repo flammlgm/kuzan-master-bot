@@ -4,6 +4,7 @@ const { config } = require('./config');
 const { sessions } = require('./sessions');
 const { deleteTicketLater } = require('./tickets');
 const { auditLog, userField } = require('./utils/auditLogger');
+const { getWeekDateRangeLabel } = require('./utils/weekRange');
 
 function getWeekLabel(value) {
   return {
@@ -23,6 +24,9 @@ async function publishPoll(interaction, session, extraText) {
   );
 
   const weekLabel = getWeekLabel(session.week);
+  const weekDateRange = getWeekDateRangeLabel(session.week, {
+    timeZone: config.EVENT_TIMEZONE,
+  });
 
   const embed = new EmbedBuilder()
     .setTitle('📅 Голосование на игру')
@@ -30,7 +34,7 @@ async function publishPoll(interaction, session, extraText) {
       [
         `<@&${session.roleId}>`,
         '',
-        `Голосование на **${weekLabel}**.`,
+        `Голосование на неделю **${weekDateRange}**.`,
         '',
         'Выберите все дни, в которые можете играть:',
         '',

@@ -11,6 +11,7 @@ const { config } = require('./config');
 const { sessions } = require('./sessions');
 const { createPrivateTicket, deleteTicketLater } = require('./tickets');
 const { auditLog, notifyOwner, userField } = require('./utils/auditLogger');
+const { createRecruitmentAnnouncementPayload } = require('./utils/recruitmentAnnouncement');
 const {
   createMyRecruitmentsSelectMenu,
   createRecruitmentManageButtons,
@@ -179,6 +180,14 @@ async function approveRecruitment(interaction, recruitmentId) {
     return interaction.editReply('Форум для объявлений не найден.');
   }
 
+  const mainTextChannel = await interaction.guild.channels
+    .fetch(config.SYSTEM_TEXT_CHANNEL_ID)
+    .catch(() => null);
+
+  if (!mainTextChannel?.isTextBased()) {
+    return interaction.editReply('Основной текстовый канал не найден.');
+  }
+
   const data = item.data;
   const author = await client.users.fetch(data.authorId).catch(() => null);
   const embed = createRecruitmentEmbed(data, author || interaction.user);
@@ -201,6 +210,8 @@ async function approveRecruitment(interaction, recruitmentId) {
   const thread = await forum.threads.create(threadPayload);
 
   pendingRecruitments.delete(recruitmentId);
+
+  await mainTextChannel.send(createRecruitmentAnnouncementPayload(thread.url));
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
