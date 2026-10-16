@@ -117,16 +117,15 @@ async function getShortsCheck(video) {
   }
 
   try {
+    const shortsUrl = `/shorts/${video.videoId}`;
     const page = await fetchTextWithTimeout(
-      `https://www.youtube.com/watch?v=${video.videoId}`,
+      `https://www.youtube.com${shortsUrl}`,
       SHORTS_PAGE_TIMEOUT_MS,
     );
 
     if (!page) {
       return { isShorts: false, reason: null };
     }
-
-    const shortsUrl = `/shorts/${video.videoId}`;
 
     if (
       page.url.includes(shortsUrl) ||
